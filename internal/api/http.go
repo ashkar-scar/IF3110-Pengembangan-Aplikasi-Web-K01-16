@@ -27,6 +27,7 @@ func (a *API) Router() http.Handler {
 	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
+	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	return mux
 }
 

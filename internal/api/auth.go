@@ -76,6 +76,53 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// logout mencabut session dan menghapus cookie
+func (api *API) logout(w http.ResponseWriter, r *http.Request) {
+	// Ambil token session dari cookie
+	cookie, err := r.Cookie(SESSION_COOKIE_NAME)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Session tidak ditemukan")
+		return
+	}
+
+	// Pastikan session masih valid dan user masih aktif
+	result, err := api.authService.Authenticate(r.Context(), cookie.Value)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidSession) {
+			api.clearSessionCookie(w)
+			writeError(w, http.StatusUnauthorized, "INVALID_SESSION", "Session tidak valid")
+			return
+		}
+
+		log.Printf("Gagal memeriksa session: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan pada server")
+		return
+	}
+
+	// Cocokkan CSRF token dari header dengan session
+	csrfToken := r.Header.Get("X-CSRF-Token")
+	if csrfToken == "" || csrfToken != result.Session.CSRFToken {
+		// Simpan token baru jika Authenticate melakukan rotasi
+		if result.NewSessionToken != "" {
+			api.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
+		}
+
+		writeError(w, http.StatusForbidden, "INVALID_CSRF", "CSRF token tidak valid")
+		return
+	}
+
+	// Revoke session agar token ga bisa digunakan lagi
+	if err := api.authService.Logout(r.Context(), cookie.Value); err != nil {
+		log.Printf("Gagal logout: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Gagal melakukan logout")
+		return
+	}
+
+	// Hapus cookie setelah session berhasil dicabut
+	api.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // Mengembalikan user dari session cookie yang valid
 func (api *API) currentUser(w http.ResponseWriter, r *http.Request) {
 	// Ambil token session dari cookie
