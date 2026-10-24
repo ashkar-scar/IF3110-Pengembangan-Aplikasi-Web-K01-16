@@ -4,21 +4,28 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 )
 
 // API menampung seluruh dependency dan handler API
 type API struct {
+	authService   *auth.Service
+	secureCookies bool
 }
 
-// Bikin objek API baru
-func Create() *API {
-	return &API{}
+// Bikin objek API baru dengan service yang dibutuhkan
+func Create(authService *auth.Service, secureCookies bool) *API {
+	return &API{
+		authService:   authService,
+		secureCookies: secureCookies,
+	}
 }
 
 // Membuat daftar route yang ada di aplikasi
 func (a *API) Router() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", a.health)
+	mux.HandleFunc("POST /api/auth/login", a.login)
 	return mux
 }
 
