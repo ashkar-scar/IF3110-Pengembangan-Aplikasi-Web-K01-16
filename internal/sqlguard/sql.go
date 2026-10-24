@@ -137,3 +137,60 @@ func Split(sql string) ([]Statement, error) {
 func word(ch byte) bool {
 	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_'
 }
+
+func Migration(sql string) ([]Statement, error) {
+	statements, err := Split(sql)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range statements {
+		if err = checkTokens(s.Tokens); err != nil {
+			return nil, err
+		}
+		t := s.Tokens
+		allowed := false
+		switch t[0] {
+		case "SELECT", "INSERT", "UPDATE", "DELETE", "WITH":
+			allowed = true
+		case "CREATE":
+			allowed = len(t) > 1 && (t[1] == "TABLE" || t[1] == "INDEX" || len(t) > 2 && t[1] == "UNIQUE" && t[2] == "INDEX")
+		case "ALTER":
+			allowed = len(t) > 1 && t[1] == "TABLE"
+		case "DROP":
+			allowed = len(t) > 1 && (t[1] == "TABLE" || t[1] == "INDEX")
+		}
+		if !allowed {
+			return nil, errors.New("statement tidak didukung oleh migration transaksional")
+		}
+	}
+	return statements, nil
+}
+
+func Plan(sql string) (Statement, error) {
+	statements, err := Migration(sql)
+	if err != nil {
+		return Statement{}, err
+	}
+	if len(statements) != 1 {
+		return Statement{}, errors.New("preview plan membutuhkan tepat satu statement")
+	}
+	s := statements[0]
+	switch s.Tokens[0] {
+	case "SELECT", "INSERT", "UPDATE", "DELETE", "WITH":
+		return s, nil
+	}
+	return Statement{}, errors.New("execution plan hanya tersedia untuk SELECT, INSERT, UPDATE, DELETE, dan WITH")
+}
+
+func checkTokens(tokens []string) error {
+	for _, token := range tokens {
+		switch token {
+		case "SCHEMA_MIGRATIONS", "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "RESET", "PRAGMA", "ATTACH", "DETACH", "VACUUM", "COPY", "CALL", "DO", "SET_CONFIG", "LOAD_EXTENSION", "READFILE", "WRITEFILE", "CONCURRENTLY", "PROGRAM", "DBLINK":
+			return errors.New("SQL berisi operasi terlarang atau objek internal platform")
+		}
+		if strings.HasPrefix(token, "PG_") || strings.HasPrefix(token, "LO_") || strings.HasPrefix(token, "DBLINK") {
+			return errors.New("fungsi administratif database tidak diperbolehkan")
+		}
+	}
+	return nil
+}
