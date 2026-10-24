@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"github.com/jackc/pgx/v5"
+	"time"
 )
 
 const SESSION_LIFETIME = 8 * time.Hour
 const ROTATION_INTERVAL = 15 * time.Minute
 const IDLE_TIMEOUT = 30 * time.Minute
+const GRACE_PERIOD = 30 * time.Second
 
 var ErrInvalidCredentials = errors.New("Username atau password salah")
 var ErrInvalidSession = errors.New("Session tidak valid")
@@ -26,9 +27,16 @@ type Service struct {
 // Menyimpan hasil login yang berhasil
 type LoginResult struct {
 	User         core.User
-	SessionToken string
+	SessionToken string `json:"-"`
 	CSRFToken    string
 	ExpiresAt    time.Time
+}
+
+// Menyimpan hasil pemeriksaan session
+type AuthenticationResult struct {
+	User            core.User
+	Session         core.Session `json:"-"`
+	NewSessionToken string       `json:"-"`
 }
 
 // NewService membuat service autentikasi
@@ -108,7 +116,7 @@ func (service *Service) Logout(ctx context.Context, sessionToken string) error {
 	now := time.Now().UTC()
 	tokenHash := HashToken(sessionToken)
 
-	// Cari session menggunakan hash token 
+	// Cari session menggunakan hash token
 	session, err := service.sessions.FindByTokenHash(ctx, tokenHash, now)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -126,11 +134,11 @@ func (service *Service) Logout(ctx context.Context, sessionToken string) error {
 	return nil
 }
 
-// Authenticate memeriksa token dan return  pemilik session
-func (service *Service) Authenticate(ctx context.Context, sessionToken string) (core.User, core.Session, error) {
+// Authenticate memeriksa token dan return pemilik session
+func (service *Service) Authenticate(ctx context.Context, sessionToken string) (AuthenticationResult, error) {
 	// Tolak request yang ga membawa token
 	if sessionToken == "" {
-		return core.User{}, core.Session{}, ErrInvalidSession
+		return AuthenticationResult{}, ErrInvalidSession
 	}
 
 	now := time.Now().UTC()
@@ -140,38 +148,74 @@ func (service *Service) Authenticate(ctx context.Context, sessionToken string) (
 	session, err := service.sessions.FindByTokenHash(ctx, tokenHash, now)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return core.User{}, core.Session{}, ErrInvalidSession
+			return AuthenticationResult{}, ErrInvalidSession
 		}
 
-		return core.User{}, core.Session{}, fmt.Errorf("Gagal mengambil session: %w", err)
+		return AuthenticationResult{}, fmt.Errorf("Gagal mengambil session: %w", err)
 	}
 
 	// Tolak session yang revoked, idle, atau absolute expired
 	if !session.Active(now, IDLE_TIMEOUT) {
-		return core.User{}, core.Session{}, ErrInvalidSession
+		return AuthenticationResult{}, ErrInvalidSession
 	}
 
 	// Ambil user yang menjadi pemilik sessionn
 	user, err := service.users.FindByID(ctx, session.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return core.User{}, core.Session{}, ErrInvalidSession
+			return AuthenticationResult{}, ErrInvalidSession
 		}
 
-		return core.User{}, core.Session{}, fmt.Errorf("Gagal mengambil pemilik session: %w", err)
+		return AuthenticationResult{}, fmt.Errorf("Gagal mengambil pemilik session: %w", err)
 	}
 
 	// Tolak session jika akun sudah tidak aktif
 	if !user.Active {
-		return core.User{}, core.Session{}, ErrInvalidSession
+		return AuthenticationResult{}, ErrInvalidSession
 	}
 
 	// Perbarui waktu terakhir session digunakan
 	if err := service.sessions.UpdateLastSeen(ctx, session.ID, now); err != nil {
-		return core.User{}, core.Session{}, fmt.Errorf("Gagal memperbarui aktivitas session: %w", err)
+		return AuthenticationResult{}, fmt.Errorf("Gagal memperbarui aktivitas session: %w", err)
 	}
 
 	session.LastSeenAt = now
 
-	return user, session, nil
+	result := AuthenticationResult{
+		User:    user,
+		Session: session,
+	}
+
+	// Rotasi token secara berkala atau setelah privilege dinaikkan
+	shouldRotate := session.RotationRequired || !now.Before(session.RotateAfter)
+	if !shouldRotate {
+		return result, nil
+	}
+
+	// Buat token baru untuk menggantikan token yang sedang digunakan
+	newSessionToken, err := GenerateToken()
+	if err != nil {
+		return AuthenticationResult{}, err
+	}
+
+	graceUntil := now.Add(GRACE_PERIOD)
+	nextRotation := now.Add(ROTATION_INTERVAL)
+
+	// Simpan token baru dan beri grace period kepada token lama
+	err = service.sessions.RotateToken(ctx, session.ID, tokenHash, HashToken(newSessionToken), now, graceUntil, nextRotation)
+
+	if err != nil {
+		// Request lain mungkin sudah merotasi token yang sama
+		if errors.Is(err, store.ErrSessionTokenNotCurrent) {
+			return result, nil
+		}
+
+		return AuthenticationResult{}, fmt.Errorf("Gagal merotasi session: %w", err)
+	}
+
+	result.Session.RotateAfter = nextRotation
+	result.Session.RotationRequired = false
+	result.NewSessionToken = newSessionToken
+
+	return result, nil
 }
