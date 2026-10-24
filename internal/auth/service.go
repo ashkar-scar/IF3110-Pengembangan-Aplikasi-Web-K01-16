@@ -98,6 +98,34 @@ func (service *Service) Login(ctx context.Context, username string, password str
 	}, nil
 }
 
+// Logout mencabut session berdasarkan token cookie.
+func (service *Service) Logout(ctx context.Context, sessionToken string) error {
+	// Tolak logout kalau token tidak ada
+	if sessionToken == "" {
+		return ErrInvalidSession
+	}
+
+	now := time.Now().UTC()
+	tokenHash := HashToken(sessionToken)
+
+	// Cari session menggunakan hash token 
+	session, err := service.sessions.FindByTokenHash(ctx, tokenHash, now)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidSession
+		}
+
+		return fmt.Errorf("Gagal mengambil session: %w", err)
+	}
+
+	// Isi revoked_at agar session tidak bisa dipakai lagi
+	if err := service.sessions.Revoke(ctx, session.ID, now); err != nil {
+		return fmt.Errorf("Gagal mencabut session: %w", err)
+	}
+
+	return nil
+}
+
 // Authenticate memeriksa token dan return  pemilik session
 func (service *Service) Authenticate(ctx context.Context, sessionToken string) (core.User, core.Session, error) {
 	// Tolak request yang ga membawa token
