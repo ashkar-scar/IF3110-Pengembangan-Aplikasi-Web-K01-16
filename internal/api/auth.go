@@ -3,11 +3,11 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"log"
 	"net/http"
 	"time"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 )
 
 const SESSION_COOKIE_NAME = "yuzuki_akmal"
@@ -76,6 +76,45 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Mengembalikan user dari session cookie yang valid
+func (api *API) currentUser(w http.ResponseWriter, r *http.Request) {
+	// Ambil token session dari cookie
+	cookie, err := r.Cookie(SESSION_COOKIE_NAME)
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Session tidak ditemukan")
+			return
+		}
+
+		writeError(w, http.StatusBadRequest, "INVALID_COOKIE", "Cookie tidak valid")
+		return
+	}
+
+	// Periksa session dan ambil user pemiliknya
+	result, err := api.authService.Authenticate(r.Context(), cookie.Value)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidSession) {
+			api.clearSessionCookie(w)
+			writeError(w, http.StatusUnauthorized, "INVALID_SESSION", "Session tidak valid")
+			return
+		}
+
+		log.Printf("Gagal memeriksa session: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan pada server")
+		return
+	}
+
+	// Perbarui cookie jika token dirotasi
+	if result.NewSessionToken != "" {
+		api.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
+	}
+
+	writeJSON(w, http.StatusOK, loginResponse{
+		User:      result.User,
+		CSRFToken: result.Session.CSRFToken,
+	})
+}
+
 // setSessionCookie mengirim token melalui cookie yang terlindungi
 func (api *API) setSessionCookie(w http.ResponseWriter, sessionToken string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
@@ -86,6 +125,20 @@ func (api *API) setSessionCookie(w http.ResponseWriter, sessionToken string, exp
 		Secure:   api.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
+	})
+}
+
+// Menghapus cookie session dari browser
+func (api *API) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     SESSION_COOKIE_NAME,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   api.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
 	})
 }
 

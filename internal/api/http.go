@@ -2,9 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"log"
 	"net/http"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 )
 
 // API menampung seluruh dependency dan handler API
@@ -26,6 +26,7 @@ func (a *API) Router() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
 	return mux
 }
 
