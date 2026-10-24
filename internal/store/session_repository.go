@@ -2,11 +2,15 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
+
+var ErrSessionTokenNotCurrent = errors.New("Session token bukan token aktif")
+var ErrInvalidSessionForRotation = errors.New("Session tidak dapat dirotasi")
 
 // Menangani penyimpanan session di database
 type SessionRepository struct {
@@ -158,6 +162,83 @@ func (repository *SessionRepository) Revoke(ctx context.Context, sessionID int64
 
 	if _, err := repository.database.Exec(ctx, query, now, sessionID); err != nil {
 		return fmt.Errorf("Gagal mencabut session: %w", err)
+	}
+
+	return nil
+}
+
+// Mengganti token lama dg token baru -> session sama, yg diganti kuncinya
+func (repository *SessionRepository) RotateToken(ctx context.Context, sessionID int64, oldTokenHash []byte, newTokenHash []byte, now time.Time, graceUntil time.Time, nextRotation time.Time) error {
+	transaction, err := repository.database.Begin(ctx)
+
+	if err != nil {
+		return fmt.Errorf("Gagal memulai transaksi rotasi: %w", err)
+	}
+
+	// Rollback if fail
+	defer transaction.Rollback(ctx)
+
+	// Jadikan token lama berlaku hanya sampai grace period selesai
+	const expireOldTokenQuery = `
+		UPDATE session_tokens
+		SET grace_until = $1
+		WHERE session_id = $2
+			AND token_hash = $3
+			AND grace_until IS NULL
+	`
+
+	result, err := transaction.Exec(ctx, expireOldTokenQuery, graceUntil, sessionID, oldTokenHash)
+
+	if err != nil {
+		return fmt.Errorf("Gagal memperbarui token lama: %w", err)
+	}
+
+	// Pastikan token lama masih merupakan token aktif
+	if result.RowsAffected() != 1 {
+		return ErrSessionTokenNotCurrent
+	}
+
+	// Simpan hash token baru sebagai token aktif
+	const insertNewTokenQuery = `
+		INSERT INTO session_tokens (
+			session_id,
+			token_hash,
+			created_at,
+			grace_until
+		)
+		VALUES ($1, $2, $3, NULL)
+	`
+
+	_, err = transaction.Exec(ctx, insertNewTokenQuery, sessionID, newTokenHash, now)
+
+	if err != nil {
+		return fmt.Errorf("Gagal menyimpan token baru: %w", err)
+	}
+
+	// Atur jadwal rotasi berikutnya tanpa mengubah absolute expiry
+	const updateSessionQuery = `
+		UPDATE sessions
+		SET
+			rotate_after = $1,
+			rotation_required = FALSE
+		WHERE id = $2
+			AND revoked_at IS NULL
+			AND absolute_expires_at > $3
+	`
+
+	result, err = transaction.Exec(ctx, updateSessionQuery, nextRotation, sessionID, now)
+
+	if err != nil {
+		return fmt.Errorf("Gagal memperbarui jadwal rotasi: %w", err)
+	}
+
+	// Pastikan session masih tersedia dan belum kedaluwarsa
+	if result.RowsAffected() != 1 {
+		return ErrInvalidSessionForRotation
+	}
+
+	if err := transaction.Commit(ctx); err != nil {
+		return fmt.Errorf("Gagal menyelesaikan rotasi token: %w", err)
 	}
 
 	return nil
