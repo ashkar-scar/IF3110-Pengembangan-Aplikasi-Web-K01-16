@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"time"
-
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/api"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
@@ -30,8 +30,18 @@ func main() {
 
 	defer database.Close() // Close connection to database
 
-	// Create new API
-	app := api.Create()
+	// Buat repository untuk user dan session
+	userRepository := store.NewUserRepository(database)
+	sessionRepository := store.NewSessionRepository(database)
+
+	// Buat service autentikasi
+	authService := auth.NewService(userRepository, sessionRepository)
+
+	// Cookie menggunakan Secure pada environment production
+	secureCookies := os.Getenv("APP_ENV") == "production"
+
+	// Buat API dengan service autentikasi.
+	app := api.Create(authService, secureCookies)
 
 	// Create server
 	server := &http.Server{
