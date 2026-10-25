@@ -4,13 +4,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} · RuangDB</title>
+  <title>{{.Title}} · DB Manager</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   {{if .User.Username}}
   <header class="topbar">
-    <a class="brand" href="/databases">RuangDB</a>
+    <a class="brand" href="/databases">DB Manager</a>
     <nav>
       <a href="/databases">Database</a>
       {{if .User.PlatformAdmin}}<a href="/admin">Administrasi</a>{{end}}

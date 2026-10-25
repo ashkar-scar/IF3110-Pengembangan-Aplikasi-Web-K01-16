@@ -89,7 +89,7 @@ func redirectQuery(t *testing.T, w *httptest.ResponseRecorder) url.Values {
 }
 
 func newDraft(description, sql, action string) url.Values {
-	return url.Values{"description": {description}, "sql": {sql}, "action": {action}, "confirm": {"yes"}}
+	return url.Values{"description": {description}, "sql": {sql}, "action": {action}}
 }
 
 func (f migrationFixture) history(t *testing.T) []core.Attempt {
@@ -195,9 +195,6 @@ func TestStaleDraftFailsWithVersionConflict(t *testing.T) {
 
 func TestMigrationFormRejectsInvalidRequests(t *testing.T) {
 	f := migrationAPI(t)
-	noConfirm := newDraft("Tanpa konfirmasi", "CREATE TABLE c (id INTEGER)", "run")
-	noConfirm.Del("confirm")
-	expectPage(t, f.submit(editorID, noConfirm), http.StatusUnprocessableEntity, "Centang konfirmasi", "CREATE TABLE c")
 	expectPage(t, f.submit(editorID, newDraft("a", "SELECT 1", "save")), http.StatusUnprocessableEntity, "Deskripsi harus")
 	expectPage(t, f.submit(editorID, newDraft("Kosong", "  ", "save")), http.StatusUnprocessableEntity, "SQL tidak boleh kosong")
 	expectPage(t, f.submit(viewerID, newDraft("Viewer", "CREATE TABLE d (id INTEGER)", "run")), http.StatusForbidden)

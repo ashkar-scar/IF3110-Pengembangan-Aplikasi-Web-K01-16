@@ -133,12 +133,6 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 		return
 	}
 
-	if action == "run" && r.FormValue("confirm") != "yes" {
-		page.Error = "Centang konfirmasi sebelum menjalankan migration."
-		render(w, http.StatusUnprocessableEntity, "migrations", page)
-		return
-	}
-
 	draft, err := a.saveDraftIfChanged(r.Context(), target, page.Draft)
 	if err != nil {
 		page.Error = err.Error()
