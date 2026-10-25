@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +13,8 @@ import (
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/testutil"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -24,22 +25,66 @@ const (
 type migrationFixture struct {
 	api      *API
 	targetID int64
+	pool     *pgxpool.Pool
+}
+
+func TestMigrationHistoryPagination(t *testing.T) {
+	f := migrationAPI(t)
+	ctx := context.Background()
+	draft, err := f.api.migrations.CreateDraft(ctx, core.Draft{TargetID: f.targetID, Description: "history fixture", SQL: "SELECT 1", CreatedBy: editorID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Identical timestamps exercise the id tie-breaker. Mixed statuses must all
+	// remain reachable, including the oldest records past the former 200 cap.
+	_, err = f.pool.Exec(ctx, `INSERT INTO migration_attempts
+	(id,target_id,draft_id,draft_revision,description,sql_text,actor_id,actor_name,base_version,status,started_at)
+	SELECT 'history-' || lpad(n::text,3,'0'),$1,$2,n,'entry-' || lpad(n::text,3,'0'),'SELECT 1',$3,'editor',0,
+	CASE WHEN n % 2 = 0 THEN 'FAILED' ELSE 'SUCCESS' END,'2026-01-01'::timestamptz
+	FROM generate_series(1,205) n`, f.targetID, draft.ID, editorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := f.get(viewerID, "")
+	if first.Code != 200 || !strings.Contains(first.Body.String(), "history_offset=200") || strings.Contains(first.Body.String(), "entry-005") {
+		t.Fatalf("first page: %d %s", first.Code, first.Body.String())
+	}
+	second := f.get(viewerID, "history_offset=200")
+	if second.Code != 200 || !strings.Contains(second.Body.String(), "entry-001") || strings.Contains(second.Body.String(), "entry-006") || strings.Contains(second.Body.String(), "history_offset=400") || !strings.Contains(second.Body.String(), "history_offset=0") {
+		t.Fatalf("second page: %d %s", second.Code, second.Body.String())
+	}
+	for _, offset := range []string{"-1", "invalid"} {
+		if w := f.get(viewerID, "history_offset="+offset); w.Code != 400 {
+			t.Fatalf("invalid offset accepted: %d", w.Code)
+		}
+	}
+	if w := f.get(viewerID, "history_offset=200&attempt=history-001"); w.Code != 200 || !strings.Contains(w.Body.String(), "berhasil") {
+		t.Fatal("old attempt detail unavailable")
+	}
+}
+
+func TestMigrationFixtureCleanup(t *testing.T) {
+	observer := testutil.Platform(t)
+	var schema string
+	t.Run("fixture", func(t *testing.T) {
+		f := migrationAPI(t)
+		if err := f.pool.QueryRow(context.Background(), "SELECT current_schema()").Scan(&schema); err != nil {
+			t.Fatal(err)
+		}
+		redirectQuery(t, f.submit(editorID, newDraft("cleanup fixture", "SELECT 1", "run")))
+		if len(f.history(t)) != 1 {
+			t.Fatal("expected persisted attempt before cleanup")
+		}
+	})
+	var exists bool
+	if err := observer.QueryRow(context.Background(), "SELECT EXISTS(SELECT FROM pg_namespace WHERE nspname=$1)", schema).Scan(&exists); err != nil || exists {
+		t.Fatalf("fixture schema not removed: %v %v", exists, err)
+	}
 }
 
 func migrationAPI(t *testing.T) migrationFixture {
 	t.Helper()
-	dsn := os.Getenv("TEST_PLATFORM_DSN")
-	if dsn == "" {
-		t.Skip("set TEST_PLATFORM_DSN to run migration tests")
-	}
-	pool, err := store.NewPostgresPool(context.Background(), dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if _, err = pool.Exec(context.Background(), store.MigrationSchema); err != nil {
-		t.Fatal(err)
-	}
+	pool := testutil.Platform(t)
 
 	a := testAPI(t)
 	a.migrations = store.NewMigrationRepository(pool)
@@ -51,7 +96,7 @@ func migrationAPI(t *testing.T) migrationFixture {
 	fake.grants[editorID] = map[int64]core.Permission{id: core.PermissionEdit}
 	fake.grants[viewerID] = map[int64]core.Permission{id: core.PermissionView}
 
-	return migrationFixture{api: a, targetID: id}
+	return migrationFixture{api: a, targetID: id, pool: pool}
 }
 
 func (f migrationFixture) get(user int64, query string) *httptest.ResponseRecorder {
@@ -114,7 +159,7 @@ func (f migrationFixture) version(t *testing.T) int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	return version
 }
 
@@ -269,7 +314,7 @@ func TestReconcileResolvesUnknownAttempts(t *testing.T) {
 		return w
 	}
 	expectPage(t, reconcile(viewerID, committed.ID), http.StatusForbidden)
-	
+
 	for _, id := range []string{committed.ID, lost.ID, running.ID} {
 		redirectQuery(t, reconcile(editorID, id))
 	}

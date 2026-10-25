@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -113,6 +114,11 @@ func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.
 
 	if page.Schema == "" && len(page.Schemas) > 0 {
 		page.Schema = page.Schemas[0]
+	}
+	if page.Schema != "" && !slices.Contains(page.Schemas, page.Schema) {
+		page.Error = "Schema tidak ditemukan."
+		render(w, http.StatusNotFound, "explorer", page)
+		return
 	}
 
 	for _, table := range snapshot.Tables {

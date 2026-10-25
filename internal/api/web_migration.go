@@ -22,16 +22,21 @@ const reconcileGrace = 2 * time.Minute
 
 type migrationsPage struct {
 	base
-	Target  Target
-	CanEdit bool
-	Drafts  []core.Draft
-	Draft   core.Draft
-	Notice  string
-	Error   string
-	Result  *core.Attempt
-	Plan    *planView
-	History []core.Attempt
+	Target         Target
+	CanEdit        bool
+	Drafts         []core.Draft
+	Draft          core.Draft
+	Notice         string
+	Error          string
+	Result         *core.Attempt
+	Plan           *planView
+	History        []core.Attempt
+	HistoryOffset  int
+	HasMoreHistory bool
 }
+
+func (p migrationsPage) PrevHistoryOffset() int { return max(p.HistoryOffset-store.AttemptsPerPage, 0) }
+func (p migrationsPage) NextHistoryOffset() int { return p.HistoryOffset + store.AttemptsPerPage }
 
 // TODO(faiz): panggil dari main.go bersama UseTargets setelah tabel migration dibuat di database platform.
 func (a *API) UseMigrations(repository *store.MigrationRepository) {
@@ -45,7 +50,12 @@ func (a *API) migrationsPage(w http.ResponseWriter, r *http.Request, session aut
 		return
 	}
 
-	page, err := a.newMigrationsPage(r.Context(), target, session)
+	offset, err := strconv.Atoi(r.URL.Query().Get("history_offset"))
+	if r.URL.Query().Has("history_offset") && (err != nil || offset < 0) {
+		a.showError(w, http.StatusBadRequest, session, "Offset riwayat tidak valid.")
+		return
+	}
+	page, err := a.newMigrationsPage(r.Context(), target, session, offset)
 	if err != nil {
 		log.Printf("Gagal membaca migration: %v", err)
 		a.showError(w, http.StatusInternalServerError, session, "Riwayat migration tidak dapat dimuat.")
@@ -70,7 +80,7 @@ func (a *API) migrationsPage(w http.ResponseWriter, r *http.Request, session aut
 	render(w, http.StatusOK, "migrations", page)
 }
 
-func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth.AuthenticationResult) (migrationsPage, error) {
+func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth.AuthenticationResult, offsets ...int) (migrationsPage, error) {
 	page := migrationsPage{
 		base:    newBase("Migration "+target.Name, session),
 		Target:  target,
@@ -84,7 +94,14 @@ func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth
 		}
 	}
 
-	page.History, err = a.migrations.ListAttempts(ctx, target.ID)
+	if len(offsets) > 0 {
+		page.HistoryOffset = max(offsets[0], 0)
+	}
+	page.History, err = a.migrations.ListAttempts(ctx, target.ID, page.HistoryOffset)
+	page.HasMoreHistory = len(page.History) > store.AttemptsPerPage
+	if page.HasMoreHistory {
+		page.History = page.History[:store.AttemptsPerPage]
+	}
 	return page, err
 }
 
@@ -313,7 +330,7 @@ func (a *API) reconcile(ctx context.Context, target Target, attempt core.Attempt
 	} else {
 		_, err = a.finish(attempt.ID, core.AttemptFailed, nil, "Tidak ada commit untuk attempt ini pada ledger database target")
 	}
-	
+
 	return err
 }
 

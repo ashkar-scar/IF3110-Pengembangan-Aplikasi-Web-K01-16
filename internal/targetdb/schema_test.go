@@ -109,3 +109,20 @@ func TestFingerprintTracksSchemaChanges(t *testing.T) {
 		t.Fatal("fingerprint did not change after ALTER TABLE")
 	}
 }
+
+func TestSnapshotIncludesEmptyPostgresSchema(t *testing.T) {
+	conn, schema := fixture(t)
+	name := schema + "_empty"
+	if _, err := conn.DB.Exec("CREATE SCHEMA " + Quote(name)); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := snapshotOf(t, conn)
+	if !slices.Contains(snapshot.Schemas(), name) {
+		t.Fatalf("empty schema missing: %v", snapshot.Schemas())
+	}
+	for _, table := range snapshot.Tables {
+		if table.Schema == name {
+			t.Fatal("empty schema unexpectedly contains a table")
+		}
+	}
+}

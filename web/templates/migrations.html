@@ -35,6 +35,10 @@
   {{else}}
   <p class="empty">Belum ada migration yang dijalankan.</p>
   {{end}}
+  <nav aria-label="Halaman riwayat migration">
+    {{if gt .HistoryOffset 0}}<a href="/databases/{{.Target.ID}}/migrations?history_offset={{.PrevHistoryOffset}}">Riwayat lebih baru</a>{{end}}
+    {{if .HasMoreHistory}}<a href="/databases/{{.Target.ID}}/migrations?history_offset={{.NextHistoryOffset}}">Riwayat lebih lama</a>{{end}}
+  </nav>
 </section>
 {{end}}
 
