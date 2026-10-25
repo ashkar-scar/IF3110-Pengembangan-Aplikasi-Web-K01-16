@@ -209,6 +209,10 @@ func (service *Service) Authenticate(ctx context.Context, sessionToken string) (
 		if errors.Is(err, store.ErrSessionTokenNotCurrent) {
 			return result, nil
 		}
+		
+		if errors.Is(err, store.ErrInvalidSessionForRotation) {
+			return AuthenticationResult{}, ErrInvalidSession
+		}
 
 		return AuthenticationResult{}, fmt.Errorf("Gagal merotasi session: %w", err)
 	}
