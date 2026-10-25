@@ -24,6 +24,11 @@ func (a *API) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) submitLogin(w http.ResponseWriter, r *http.Request) {
+	if !a.validOrigin(r) {
+		a.showError(w, http.StatusForbidden, auth.AuthenticationResult{}, "Origin request tidak valid.")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	username := r.FormValue("username")
 	result, err := a.authService.Login(r.Context(), username, r.FormValue("password"))
 	if err != nil {
@@ -44,6 +49,8 @@ func (a *API) submitLogout(w http.ResponseWriter, r *http.Request, session auth.
 	cookie, _ := r.Cookie(SESSION_COOKIE_NAME)
 	if err := a.authService.Logout(r.Context(), cookie.Value); err != nil {
 		log.Printf("Gagal logout: %v", err)
+		a.showError(w, http.StatusServiceUnavailable, session, "Session belum berhasil dicabut. Coba keluar kembali.")
+		return
 	}
 	
 	a.clearSessionCookie(w)

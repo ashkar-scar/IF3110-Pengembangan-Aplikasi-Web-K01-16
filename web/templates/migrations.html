@@ -1,4 +1,5 @@
 {{define "content"}}
+{{if .CanEdit}}<p><a href="/databases/{{.Target.ID}}/diff">Bandingkan schema dan buat SQL migration</a></p>{{end}}
 {{template "database-header" .}}
 
 <nav class="tabs">
