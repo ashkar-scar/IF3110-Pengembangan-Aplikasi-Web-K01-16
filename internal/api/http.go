@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
 
 // API menampung seluruh dependency dan handler API
@@ -14,6 +15,7 @@ type API struct {
 	secureCookies bool
 	targets       TargetSource
 	dataDir       string
+	migrations    *store.MigrationRepository
 }
 
 // Bikin objek API baru dengan service yang dibutuhkan
@@ -32,6 +34,7 @@ func (a *API) Router() http.Handler {
 	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	a.explorerRoutes(mux)
+	a.migrationRoutes(mux)
 	return mux
 }
 

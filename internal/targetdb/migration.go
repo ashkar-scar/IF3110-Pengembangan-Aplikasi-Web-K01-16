@@ -13,7 +13,6 @@ var ErrVersion = errors.New("versi database telah berubah; muat ulang dan tinjau
 var ErrDrift = errors.New("schema telah berubah sejak SQL dihasilkan; bandingkan ulang schema")
 var ErrUnknown = errors.New("hasil commit belum dapat dipastikan; lakukan rekonsiliasi sebelum mencoba kembali")
 
-// TODO(askhar): samakan tipe ID dengan primary key tabel migration_attempts.
 type Execution struct {
 	ID          string
 	SQL         string
