@@ -1,0 +1,70 @@
+{{define "content"}}
+  {{template "database-header" .}}
+  <p><a href="/databases/{{.Target.ID}}/migrations">Kembali ke migration</a></p>
+  <h2>Bandingkan schema</h2>
+  <p>Schema database ini akan dibandingkan dengan kondisi yang diinginkan. SQL kandidat dapat ditinjau dan diedit sebelum dijalankan.</p>
+  {{if .Error}}
+    <p class="alert error" role="alert">{{.Error}}</p>
+  {{end}}
+  <form method="post" action="/databases/{{.Target.ID}}/diff" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>
+      Database pembanding
+      <select name="source_id" required>
+        {{range .Targets}}
+          {{if eq .Driver $.Target.Driver}}
+            <option value="{{.ID}}" {{if eq .ID $.SourceID}}selected{{end}}>{{.Name}}</option>
+          {{end}}
+        {{end}}
+      </select>
+    </label>
+    <label>
+      Schema saat ini
+      <input name="current_schema" required value="{{.CurrentSchema}}">
+    </label>
+    <label>
+      Schema yang diinginkan
+      <input name="desired_schema" required value="{{.DesiredSchema}}">
+    </label>
+    <label class="check">
+      <input type="checkbox" name="destructive" value="yes" {{if .AllowDestructive}}checked{{end}}>
+      Sertakan operasi destruktif (hapus objek/perubahan tipe)
+    </label>
+    <div class="buttons">
+      <button name="action" value="compare">Bandingkan</button>
+      <button name="action" value="draft">Buat draft untuk ditinjau</button>
+    </div>
+  </form>
+  {{if .Result}}
+    {{if .Result.Manual}}
+      <p class="alert warning">Sebagian perubahan memerlukan SQL manual. Kandidat berikut hanya memuat operasi yang didukung dan dipilih.</p>
+    {{end}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Objek</th>
+            <th>Perubahan</th>
+            <th>Risiko</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Result.Changes}}
+            <tr>
+              <td>{{.Object}}</td>
+              <td>{{.Description}}</td>
+              <td>{{if .Manual}}Manual{{else if .Destructive}}Destruktif{{else}}Normal{{end}}</td>
+            </tr>
+          {{else}}
+            <tr>
+              <td colspan="3">Schema identik.</td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <h2>SQL kandidat</h2>
+    <pre>{{.Result.SQL}}</pre>
+    <p class="muted">Operasi destruktif tidak dimasukkan tanpa pilihan eksplisit. Constraint yang bergantung pada operasi tersebut mungkin memerlukan penyesuaian manual. Perubahan schema setelah draft dibuat akan ditolak melalui fingerprint.</p>
+  {{end}}
+{{end}}
