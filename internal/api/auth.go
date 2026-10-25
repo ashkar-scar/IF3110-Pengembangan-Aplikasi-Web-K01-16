@@ -37,6 +37,11 @@ type errorResponse struct {
 
 // Login memeriksa kredensial dan membuat cookie sessionn
 func (api *API) login(w http.ResponseWriter, r *http.Request) {
+	if !api.validOrigin(r) {
+		writeError(w, http.StatusForbidden, "INVALID_CSRF", "Origin request tidak valid")
+		return
+	}
+
 	var request loginRequest
 
 	// Batasi ukuran body request maksimal satu megabyte
@@ -78,6 +83,11 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 
 // logout mencabut session dan menghapus cookie
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {
+	if !api.validOrigin(r) {
+		writeError(w, http.StatusForbidden, "INVALID_CSRF", "Origin request tidak valid")
+		return
+	}
+	
 	// Ambil token session dari cookie
 	cookie, err := r.Cookie(SESSION_COOKIE_NAME)
 	if err != nil {

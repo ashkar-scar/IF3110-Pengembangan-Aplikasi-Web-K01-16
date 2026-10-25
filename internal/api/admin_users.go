@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -18,6 +17,7 @@ type AdminUserSource interface {
 	FindAll(ctx context.Context) ([]core.User, error)
 }
 
+// User request
 type createUserRequest struct {
 	Username      string `json:"username"`
 	Password      string `json:"password"`
@@ -55,19 +55,14 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request, _ auth.Authentic
 // Memvalidasi, melakukan hash password, dan menyimpan user baru
 func (a *API) createUser(w http.ResponseWriter, r *http.Request, _ auth.AuthenticationResult) {
 	var request createUserRequest
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Format request tidak valid")
+	if !readJSON(w, r, &request) {
 		return
 	}
 
 	request.Username = strings.TrimSpace(request.Username)
 
-	if request.Username == "" {
-		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Username wajib diisi")
+	if request.Username == "" || len(request.Username) > 100 {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Username wajib diisi dan maksimal 100 byte")
 		return
 	}
 

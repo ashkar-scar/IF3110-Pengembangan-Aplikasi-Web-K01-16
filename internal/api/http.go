@@ -15,6 +15,9 @@ type API struct {
 	targets       TargetSource
 	dataDir       string
 	users         AdminUserSource
+	groups        AdminGroupSource
+	grants        AdminGrantSource
+	registry      AdminDatabaseSource
 	migrations    *store.MigrationRepository
 }
 
@@ -34,6 +37,10 @@ func (a *API) Router() http.Handler {
 	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	a.userRoutes(mux)
+	a.groupRoutes(mux)
+	a.grantRoutes(mux)
+	a.databaseRoutes(mux)
+	a.editRoutes(mux)
 	a.explorerRoutes(mux)
 	a.webRoutes(mux)
 	return mux
