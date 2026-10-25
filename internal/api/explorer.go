@@ -45,7 +45,7 @@ func (a *API) explorerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/databases", a.signedIn(a.databases))
 	mux.HandleFunc("POST /api/admin/databases/{id}/test", a.signedIn(a.testTarget))
 	for _, view := range []string{"schema", "schemas", "tables", "table", "rows"} {
-		mux.HandleFunc("GET /api/databases/{id}/"+view, a.signedIn(a.explore))
+		mux.HandleFunc("GET /api/databases/{id}/"+view, a.RequireDatabasePermission(core.PermissionView, a.explore))
 	}
 }
 
@@ -127,6 +127,10 @@ func (a *API) databases(w http.ResponseWriter, r *http.Request, session auth.Aut
 }
 
 func (a *API) testTarget(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	if !a.validOrigin(r) {
+		writeError(w, http.StatusForbidden, "INVALID_CSRF", "Origin request tidak valid")
+		return
+	}
 	if !session.User.CanManagePlatform() {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", "Hanya admin platform yang dapat menguji koneksi")
 		return
