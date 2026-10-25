@@ -1,0 +1,122 @@
+{{define "content"}}
+{{template "database-header" .}}
+
+<nav class="tabs">
+  <a class="active" href="/databases/{{.Target.ID}}">Explorer</a>
+  <a href="/databases/{{.Target.ID}}/migrations">Migration</a>
+</nav>
+
+{{if .Error}}<p class="alert error">{{.Error}}</p>{{end}}
+
+<div class="explorer">
+  <aside>
+    <h2>Schema</h2>
+    <ul>
+      {{range .Schemas}}
+      <li><a {{if eq . $.Schema}}class="active"{{end}} href="/databases/{{$.Target.ID}}?schema={{.}}">{{.}}</a></li>
+      {{end}}
+    </ul>
+
+    <h2>Tabel</h2>
+    <ul>
+      {{range .Tables}}
+      <li><a {{if and $.Table (eq .Name $.Table.Name)}}class="active"{{end}} href="/databases/{{$.Target.ID}}?schema={{.Schema}}&table={{.Name}}">{{.Name}}</a></li>
+      {{else}}
+      <li class="muted">Belum ada tabel</li>
+      {{end}}
+    </ul>
+  </aside>
+
+  <section>
+    {{with .Table}}
+    <h2>{{.Schema}}.{{.Name}}</h2>
+    {{$link := printf "/databases/%d?schema=%s&table=%s" $.Target.ID (urlquery .Schema) (urlquery .Name)}}
+    <nav class="tabs small">
+      <a {{if eq $.View "data"}}class="active"{{end}} href="{{$link}}">Data</a>
+      <a {{if eq $.View "columns"}}class="active"{{end}} href="{{$link}}&view=columns">Kolom</a>
+      <a {{if eq $.View "constraints"}}class="active"{{end}} href="{{$link}}&view=constraints">Constraint</a>
+      <a {{if eq $.View "indexes"}}class="active"{{end}} href="{{$link}}&view=indexes">Index</a>
+    </nav>
+
+    {{if eq $.View "data"}}{{template "table-data" $}}{{end}}
+    {{if eq $.View "columns"}}{{template "table-columns" .}}{{end}}
+    {{if eq $.View "constraints"}}{{template "table-constraints" .}}{{end}}
+    {{if eq $.View "indexes"}}{{template "table-indexes" .}}{{end}}
+    {{else}}
+    <p class="empty">Pilih tabel untuk melihat struktur dan datanya.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}
+
+{{define "table-data"}}
+{{if .Rows}}
+<div class="scroll">
+  <table>
+    <thead><tr>{{range .Columns}}<th>{{.}}</th>{{end}}</tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>{{range .}}<td>{{if .Null}}<span class="null">NULL</span>{{else}}{{.Value}}{{end}}</td>{{end}}</tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+<p class="pagination">
+  Baris {{.FirstRow}} sampai {{.LastRow}}
+  {{if gt .Offset 0}}<a href="/databases/{{.Target.ID}}?schema={{.Schema}}&table={{.Table.Name}}&offset={{.PrevOffset}}">&larr; Sebelumnya</a>{{end}}
+  {{if .HasMore}}<a href="/databases/{{.Target.ID}}?schema={{.Schema}}&table={{.Table.Name}}&offset={{.NextOffset}}">Selanjutnya &rarr;</a>{{end}}
+</p>
+{{else}}
+<p class="empty">Tidak ada data pada halaman ini.</p>
+{{end}}
+{{end}}
+
+{{define "table-columns"}}
+<table>
+  <thead><tr><th>Nama</th><th>Tipe</th><th>Nullable</th><th>Default</th></tr></thead>
+  <tbody>
+    {{range .Columns}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{.Type}}</td>
+      <td>{{if .Nullable}}Ya{{else}}Tidak{{end}}</td>
+      <td>{{with .Default}}<code>{{.}}</code>{{else}}-{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{define "table-constraints"}}
+{{if .Constraints}}
+<table>
+  <thead><tr><th>Nama</th><th>Jenis</th><th>Definisi</th></tr></thead>
+  <tbody>
+    {{range .Constraints}}
+    <tr><td>{{.Name}}</td><td>{{constraintKind .Kind}}</td><td><code>{{.Definition}}</code></td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">Tidak ada constraint.</p>
+{{end}}
+{{with .Definition}}
+<p class="muted">Definisi tabel SQLite (CHECK constraint hanya terlihat di sini):</p>
+<pre>{{.}}</pre>
+{{end}}
+{{end}}
+
+{{define "table-indexes"}}
+{{if .Indexes}}
+<table>
+  <thead><tr><th>Nama</th><th>Unique</th><th>Definisi</th></tr></thead>
+  <tbody>
+    {{range .Indexes}}
+    <tr><td>{{.Name}}</td><td>{{if .Unique}}Ya{{else}}Tidak{{end}}</td><td><code>{{.Definition}}</code></td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">Tidak ada index.</p>
+{{end}}
+{{end}}
