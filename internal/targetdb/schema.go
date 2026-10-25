@@ -10,6 +10,8 @@ import (
 	"sort"
 )
 
+var ErrTableNotFound = errors.New("table tidak ditemukan")
+
 type Column struct {
 	Name      string  `json:"name"`
 	Type      string  `json:"type"`
@@ -61,7 +63,7 @@ func (s Snapshot) Find(schema, name string) (Table, error) {
 			return table, nil
 		}
 	}
-	return Table{}, errors.New("table tidak ditemukan")
+	return Table{}, ErrTableNotFound
 }
 
 func (s Snapshot) Schemas() []string {
