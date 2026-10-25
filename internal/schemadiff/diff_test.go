@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/testdb"
 )
 
 func TestDiffChangesAndRiskSelection(t *testing.T) {
@@ -75,10 +75,7 @@ func TestSQLiteGeneratorAndManualChanges(t *testing.T) {
 }
 
 func TestPostgresGeneratedMigrationMatchesDesired(t *testing.T) {
-	dsn := os.Getenv("TEST_TARGET_DSN")
-	if dsn == "" {
-		t.Skip("set TEST_TARGET_DSN")
-	}
+	dsn := testdb.Target(t)
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -120,5 +117,26 @@ func TestPostgresGeneratedMigrationMatchesDesired(t *testing.T) {
 	r, err = Compare(after, after, aSchema, bSchema, true)
 	if err != nil || len(r.Changes) != 0 {
 		t.Fatal("generated SQL did not reach desired schema", r, err)
+	}
+}
+
+func TestDiffDistinguishesMissingAndEmptySchemas(t *testing.T) {
+	current := targetdb.Snapshot{Driver: "postgres", SchemaNames: []string{"public"}, Tables: []targetdb.Table{{Schema: "public", Name: "employees"}}}
+	empty := targetdb.Snapshot{Driver: "postgres", SchemaNames: []string{"empty"}}
+	for _, destructive := range []bool{false, true} {
+		for _, names := range [][2]string{{"public", "typo"}, {"typo", "empty"}} {
+			result, err := Compare(current, empty, names[0], names[1], destructive)
+			if err == nil || result.SQL != "" || len(result.Changes) != 0 {
+				t.Fatalf("missing schema generated SQL: %+v %v", result, err)
+			}
+		}
+		result, err := Compare(current, empty, "public", "empty", destructive)
+		if err != nil || strings.Contains(result.SQL, "DROP TABLE") != destructive {
+			t.Fatalf("existing empty schema: %+v %v", result, err)
+		}
+		result, err = Compare(empty, current, "empty", "public", destructive)
+		if err != nil || !strings.Contains(result.SQL, "CREATE TABLE") {
+			t.Fatalf("empty current schema: %+v %v", result, err)
+		}
 	}
 }

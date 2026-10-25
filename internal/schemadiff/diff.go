@@ -3,6 +3,7 @@ package schemadiff
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -27,6 +28,12 @@ func Compare(current, desired targetdb.Snapshot, currentSchema, desiredSchema st
 	result := Result{Changes: []Change{}}
 	if current.Driver != desired.Driver {
 		return result, fmt.Errorf("perbandingan lintas DBMS tidak didukung")
+	}
+	if !slices.Contains(current.Schemas(), currentSchema) {
+		return result, fmt.Errorf("schema target %q tidak ditemukan", currentSchema)
+	}
+	if !slices.Contains(desired.Schemas(), desiredSchema) {
+		return result, fmt.Errorf("schema pembanding %q tidak ditemukan", desiredSchema)
 	}
 
 	before, after := map[string]targetdb.Table{}, map[string]targetdb.Table{}
