@@ -54,7 +54,7 @@ func sqliteURI(path string, query url.Values) string {
 }
 
 func (c *Connection) snapshotSQLite(ctx context.Context, q rowsQueryer) (Snapshot, error) {
-	s := Snapshot{Driver: c.Driver, Tables: []Table{}}
+	s := Snapshot{Driver: c.Driver, SchemaNames: []string{"main"}, Tables: []Table{}}
 	rows, err := q.QueryContext(ctx, "SELECT name, sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations' ORDER BY name")
 	if err != nil {
 		return s, err

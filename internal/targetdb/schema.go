@@ -47,8 +47,9 @@ type Table struct {
 	Indexes     []Index      `json:"indexes"`
 }
 type Snapshot struct {
-	Driver string  `json:"driver"`
-	Tables []Table `json:"tables"`
+	Driver      string   `json:"driver"`
+	SchemaNames []string `json:"schemas"`
+	Tables      []Table  `json:"tables"`
 }
 
 func (s Snapshot) Fingerprint() string {
@@ -69,6 +70,12 @@ func (s Snapshot) Find(schema, name string) (Table, error) {
 func (s Snapshot) Schemas() []string {
 	seen := map[string]bool{}
 	result := []string{}
+	for _, name := range s.SchemaNames {
+		if !seen[name] {
+			result = append(result, name)
+			seen[name] = true
+		}
+	}
 	for _, table := range s.Tables {
 		if !seen[table.Schema] {
 			result = append(result, table.Schema)
@@ -92,6 +99,24 @@ func (c *Connection) snapshot(ctx context.Context, q rowsQueryer) (Snapshot, err
 		return c.snapshotSQLite(ctx, q)
 	}
 	s := Snapshot{Driver: c.Driver, Tables: []Table{}}
+	schemaRows, err := q.QueryContext(ctx, `SELECT nspname FROM pg_namespace
+WHERE nspname NOT IN ('pg_catalog','information_schema') AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%' ORDER BY nspname`)
+	if err != nil {
+		return s, err
+	}
+	for schemaRows.Next() {
+		var name string
+		if err = schemaRows.Scan(&name); err != nil {
+			schemaRows.Close()
+			return s, err
+		}
+		s.SchemaNames = append(s.SchemaNames, name)
+	}
+	err = schemaRows.Err()
+	schemaRows.Close()
+	if err != nil {
+		return s, err
+	}
 	rows, err := q.QueryContext(ctx, `SELECT n.nspname,t.relname FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
 WHERE t.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%' AND t.relname <> 'schema_migrations' ORDER BY n.nspname,t.relname`)
 	if err != nil {
