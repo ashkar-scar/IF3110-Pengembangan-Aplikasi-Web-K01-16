@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var ErrPagination = errors.New("pagination tidak valid")
+
 type RowPage struct {
 	Columns []string `json:"columns"`
 	Rows    [][]any  `json:"rows"`
@@ -19,7 +21,7 @@ type RowPage struct {
 func (c *Connection) Rows(ctx context.Context, schema, name string, limit, offset int) (RowPage, error) {
 	page := RowPage{Rows: [][]any{}, Limit: limit, Offset: offset}
 	if limit < 1 || limit > 200 || offset < 0 || offset > 1000000 {
-		return page, errors.New("pagination tidak valid")
+		return page, ErrPagination
 	}
 	snapshot, err := c.Snapshot(ctx)
 	if err != nil {
