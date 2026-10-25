@@ -94,6 +94,7 @@ label {
 }
 
 input,
+select,
 textarea {
   display: block;
   width: 100%;
@@ -143,6 +144,19 @@ button.primary {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Form admin */
+.admin-form {
+  max-width: 560px;
+  margin: 16px 0 24px;
+}
+
+.admin-inline {
+  display: inline-block;
+  margin: 4px;
+}
+
+.table-wrap { overflow-x: auto; }
 
 /* Halaman login */
 .login {
