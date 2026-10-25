@@ -114,6 +114,11 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 		CreatedBy:   session.User.ID,
 	}
 	action := r.FormValue("action")
+	if action != "save" && action != "run" && action != "plan" {
+		page.Error = "Aksi migration tidak valid."
+		render(w, 422, "migrations", page)
+		return
+	}
 
 	if action == "plan" {
 		plan, err := a.explain(r.Context(), target, page.Draft.SQL)
