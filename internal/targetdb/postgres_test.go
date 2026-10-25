@@ -2,8 +2,8 @@ package targetdb
 
 import (
 	"context"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/testdb"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,10 +20,7 @@ func TestQuote(t *testing.T) {
 
 func postgresConfig(t *testing.T) (Config, string) {
 	t.Helper()
-	dsn := os.Getenv("TEST_TARGET_DSN")
-	if dsn == "" {
-		t.Skip("set TEST_TARGET_DSN to run PostgreSQL integration tests")
-	}
+	dsn := testdb.Target(t)
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Fatal(err)

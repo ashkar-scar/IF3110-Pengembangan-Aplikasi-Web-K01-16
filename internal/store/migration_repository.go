@@ -96,7 +96,7 @@ func (repository *MigrationRepository) UpdateDraft(ctx context.Context, draft co
 	if errors.Is(err, ErrDraftNotFound) {
 		return updated, ErrDraftConflict
 	}
-	
+
 	return updated, err
 }
 
@@ -145,8 +145,15 @@ func (repository *MigrationRepository) FinishAttempt(ctx context.Context, attemp
 	return scanAttempt(repository.database.QueryRow(ctx, query, status, version, message, attemptID))
 }
 
-func (repository *MigrationRepository) ListAttempts(ctx context.Context, targetID int64) ([]core.Attempt, error) {
-	rows, err := repository.database.Query(ctx, "SELECT "+attemptColumns+" FROM migration_attempts WHERE target_id = $1 ORDER BY started_at DESC LIMIT 200", targetID)
+const AttemptsPerPage = 200
+
+// ListAttempts returns a page plus one lookahead row for navigation.
+func (repository *MigrationRepository) ListAttempts(ctx context.Context, targetID int64, offsets ...int) ([]core.Attempt, error) {
+	offset := 0
+	if len(offsets) > 0 {
+		offset = max(offsets[0], 0)
+	}
+	rows, err := repository.database.Query(ctx, "SELECT "+attemptColumns+" FROM migration_attempts WHERE target_id = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3", targetID, AttemptsPerPage+1, offset)
 	if err != nil {
 		return nil, fmt.Errorf("Gagal membaca riwayat migration: %w", err)
 	}
@@ -158,7 +165,7 @@ func (repository *MigrationRepository) ListAttempts(ctx context.Context, targetI
 		if err != nil {
 			return nil, err
 		}
-		
+
 		attempts = append(attempts, attempt)
 	}
 
