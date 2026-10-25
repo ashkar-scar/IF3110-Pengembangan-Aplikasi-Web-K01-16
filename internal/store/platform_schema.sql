@@ -38,9 +38,22 @@ CREATE TABLE IF NOT EXISTS group_members (
     PRIMARY KEY (group_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS database_targets (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    driver TEXT NOT NULL DEFAULT 'postgres',
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    database_name TEXT NOT NULL,
+    username TEXT NOT NULL,
+    sslmode TEXT NOT NULL,
+    password_ciphertext BYTEA NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 CREATE TABLE IF NOT EXISTS database_grants (
     group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-    database_id BIGINT NOT NULL,
+    database_id BIGINT NOT NULL REFERENCES database_targets(id),
     permission TEXT NOT NULL CHECK (permission IN ('VIEW', 'EDIT')),
     PRIMARY KEY (group_id, database_id)
 );
