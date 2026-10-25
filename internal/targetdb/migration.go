@@ -26,6 +26,9 @@ type Execution struct {
 const postgresLedger = `CREATE TABLE IF NOT EXISTS public.schema_migrations (
 version BIGINT PRIMARY KEY, attempt_id TEXT UNIQUE NOT NULL, sql_text TEXT NOT NULL, actor_id BIGINT NOT NULL, actor_name TEXT NOT NULL, executed_at TIMESTAMPTZ NOT NULL DEFAULT now())`
 
+const sqliteLedger = `CREATE TABLE IF NOT EXISTS main.schema_migrations (
+version INTEGER PRIMARY KEY, attempt_id TEXT UNIQUE NOT NULL, sql_text TEXT NOT NULL, actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`
+
 func (c *Connection) Execute(ctx context.Context, execution Execution) (int64, error) {
 	statements, err := sqlguard.Migration(execution.SQL)
 	if err != nil {
@@ -39,7 +42,11 @@ func (c *Connection) Execute(ctx context.Context, execution Execution) (int64, e
 	if err = c.lock(ctx, tx); err != nil {
 		return 0, err
 	}
-	if _, err = tx.ExecContext(ctx, postgresLedger); err != nil {
+	ledgerDDL := postgresLedger
+	if c.Driver == "sqlite" {
+		ledgerDDL = sqliteLedger
+	}
+	if _, err = tx.ExecContext(ctx, ledgerDDL); err != nil {
 		return 0, err
 	}
 	var version int64
@@ -83,6 +90,9 @@ func (c *Connection) Execute(ctx context.Context, execution Execution) (int64, e
 }
 
 func (c *Connection) lock(ctx context.Context, tx *sql.Tx) error {
+	if c.Driver == "sqlite" {
+		return nil
+	}
 	if _, err := tx.ExecContext(ctx, "SET LOCAL statement_timeout='30s'; SET LOCAL lock_timeout='5s'"); err != nil {
 		return err
 	}

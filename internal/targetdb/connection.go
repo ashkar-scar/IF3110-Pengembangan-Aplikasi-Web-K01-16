@@ -55,12 +55,19 @@ type queryer interface {
 }
 
 func (c *Connection) ledger() string {
+	if c.Driver == "sqlite" {
+		return "main.schema_migrations"
+	}
 	return "public.schema_migrations"
 }
 
 func (c *Connection) hasLedger(ctx context.Context, q queryer) (bool, error) {
+	query := "SELECT to_regclass('public.schema_migrations') IS NOT NULL"
+	if c.Driver == "sqlite" {
+		query = "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='schema_migrations')"
+	}
 	var exists bool
-	err := q.QueryRowContext(ctx, "SELECT to_regclass('public.schema_migrations') IS NOT NULL").Scan(&exists)
+	err := q.QueryRowContext(ctx, query).Scan(&exists)
 	return exists, err
 }
 

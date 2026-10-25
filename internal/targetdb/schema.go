@@ -39,11 +39,11 @@ type Index struct {
 type Table struct {
 	Schema      string       `json:"schema"`
 	Name        string       `json:"name"`
+	Definition  string       `json:"definition,omitempty"`
 	Columns     []Column     `json:"columns"`
 	Constraints []Constraint `json:"constraints"`
 	Indexes     []Index      `json:"indexes"`
 }
-
 type Snapshot struct {
 	Driver string  `json:"driver"`
 	Tables []Table `json:"tables"`
@@ -86,6 +86,9 @@ func (c *Connection) Snapshot(ctx context.Context) (Snapshot, error) {
 }
 
 func (c *Connection) snapshot(ctx context.Context, q rowsQueryer) (Snapshot, error) {
+	if c.Driver == "sqlite" {
+		return c.snapshotSQLite(ctx, q)
+	}
 	s := Snapshot{Driver: c.Driver, Tables: []Table{}}
 	rows, err := q.QueryContext(ctx, `SELECT n.nspname,t.relname FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
 WHERE t.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%' AND t.relname <> 'schema_migrations' ORDER BY n.nspname,t.relname`)
