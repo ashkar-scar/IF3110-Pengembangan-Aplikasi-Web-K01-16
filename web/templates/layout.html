@@ -1,0 +1,39 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · RuangDB</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {{if .User.Username}}
+  <header class="topbar">
+    <a class="brand" href="/databases">RuangDB</a>
+    <nav>
+      <a href="/databases">Database</a>
+      {{if .User.PlatformAdmin}}<a href="/admin">Administrasi</a>{{end}}
+    </nav>
+    <form class="logout" method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <span>{{.User.Username}}</span>
+      <button type="submit">Keluar</button>
+    </form>
+  </header>
+  {{end}}
+  <main>
+    {{template "content" .}}
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "database-header"}}
+<p><a href="/databases">&larr; Semua database</a></p>
+<h1>{{.Target.Name}} <small class="tag">{{.Target.Driver}}</small></h1>
+<p class="muted">
+  {{if eq .Target.Permission "EDIT"}}View + Edit: Anda dapat membuat dan menjalankan migration.
+  {{else}}View Only: Anda dapat melihat schema, data, dan riwayat migration.{{end}}
+</p>
+{{end}}

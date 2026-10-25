@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Database</h1>
+<p class="muted">Database yang dapat Anda akses.</p>
+
+{{if .Targets}}
+<table>
+  <thead>
+    <tr>
+      <th>Nama</th>
+      <th>DBMS</th>
+      <th>Akses</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Targets}}
+    <tr>
+      <td><a href="/databases/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.Driver}}</td>
+      <td>{{if eq .Permission "EDIT"}}View + Edit{{else}}View Only{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">Belum ada database yang dapat Anda akses. Hubungi admin untuk ditambahkan ke group.</p>
+{{end}}
+{{end}}

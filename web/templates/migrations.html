@@ -1,0 +1,114 @@
+{{define "content"}}
+{{template "database-header" .}}
+
+<nav class="tabs">
+  <a href="/databases/{{.Target.ID}}">Explorer</a>
+  <a class="active" href="/databases/{{.Target.ID}}/migrations">Migration</a>
+</nav>
+
+{{if .Notice}}<p class="alert success">{{.Notice}}</p>{{end}}
+{{if .Error}}<p class="alert error">{{.Error}}</p>{{end}}
+{{with .Result}}{{template "attempt-result" .}}{{end}}
+
+{{if .CanEdit}}{{template "editor" .}}{{end}}
+
+<section>
+  <h2>Riwayat migration</h2>
+  {{range .History}}
+  <details class="history">
+    <summary>
+      <span class="status {{.Status}}">{{.Status}}</span>
+      <strong>{{.Description}}</strong>
+      <span class="muted">{{with .Version}}versi {{.}}{{else}}dari versi {{.BaseVersion}}{{end}}</span>
+    </summary>
+    <p class="muted">{{.ActorName}} · {{.StartedAt.Format "02 Jan 2006 15:04"}} · revisi {{.Revision}}</p>
+    <pre>{{.SQL}}</pre>
+    {{with .Error}}<p class="alert error">{{.}}</p>{{end}}
+    {{if and $.CanEdit (or (eq .Status "UNKNOWN") (eq .Status "RUNNING"))}}
+    <form method="post" action="/databases/{{$.Target.ID}}/migrations/{{.ID}}/reconcile">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <button type="submit">Rekonsiliasi hasil</button>
+    </form>
+    {{end}}
+  </details>
+  {{else}}
+  <p class="empty">Belum ada migration yang dijalankan.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{define "attempt-result"}}
+{{if eq .Status "SUCCESS"}}
+<p class="alert success">Migration "{{.Description}}" berhasil. Database sekarang di versi {{.Version}}.</p>
+{{else if eq .Status "FAILED"}}
+<p class="alert error">Migration "{{.Description}}" gagal: {{.Error}}</p>
+{{else}}
+<p class="alert warning">Status migration "{{.Description}}" adalah {{.Status}}. Gunakan tombol Rekonsiliasi pada riwayat untuk memastikan hasilnya.</p>
+{{end}}
+{{end}}
+
+{{define "editor"}}
+<section>
+  <h2>SQL migration</h2>
+  <p>
+    Draft tersimpan:
+    <a href="/databases/{{.Target.ID}}/migrations">+ Draft baru</a>
+    {{range .Drafts}} · <a href="/databases/{{$.Target.ID}}/migrations?draft={{.ID}}">{{.Description}}</a>{{end}}
+  </p>
+
+  <form method="post" action="/databases/{{.Target.ID}}/migrations">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <input type="hidden" name="draft_id" value="{{.Draft.ID}}">
+    <input type="hidden" name="revision" value="{{.Draft.Revision}}">
+    <input type="hidden" name="fingerprint" value="{{.Draft.Fingerprint}}">
+
+    <label>Deskripsi
+      <input name="description" value="{{.Draft.Description}}" maxlength="200" placeholder="Contoh: Tambah kolom status pelanggan">
+    </label>
+    <label for="sql">SQL</label>
+    <textarea id="sql" name="sql" rows="10" spellcheck="false">{{.Draft.SQL}}</textarea>
+    <p class="muted">
+      {{if .Draft.ID}}Revisi {{.Draft.Revision}}, disusun saat database di versi {{.Draft.BaseVersion}}.
+      {{else}}Draft baru. Versi database dicatat saat draft disimpan.{{end}}
+    </p>
+
+    <label class="check">
+      <input type="checkbox" name="confirm" value="yes">
+      Saya sudah meninjau SQL ini dan siap menjalankannya
+    </label>
+
+    <div class="buttons">
+      <button type="submit" name="action" value="save">Simpan draft</button>
+      <button type="submit" name="action" value="plan">Lihat execution plan</button>
+      <button class="primary" type="submit" name="action" value="run">Jalankan migration</button>
+    </div>
+  </form>
+
+  {{with .Plan}}{{template "plan" .}}{{end}}
+</section>
+{{end}}
+
+{{define "plan"}}
+<h3>Execution plan</h3>
+{{if eq .Driver "postgres"}}
+<p class="muted">Hasil EXPLAIN tanpa ANALYZE. Query tidak dijalankan, cost dan rows adalah perkiraan.</p>
+{{range .Nodes}}{{template "plan-node" .}}{{end}}
+{{else}}
+<p class="muted">Hasil EXPLAIN QUERY PLAN SQLite. Query tidak dijalankan.</p>
+<table>
+  <thead><tr><th>Langkah</th><th>Induk</th><th>Detail</th></tr></thead>
+  <tbody>
+    {{range .Steps}}<tr><td>{{.ID}}</td><td>{{.Parent}}</td><td>{{.Detail}}</td></tr>{{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}
+
+{{define "plan-node"}}
+<div class="plan-node">
+  <strong>{{.Title}}</strong>
+  <span class="muted">{{.Estimate}}</span>
+  {{with .Condition}}<code>{{.}}</code>{{end}}
+  {{range .Children}}{{template "plan-node" .}}{{end}}
+</div>
+{{end}}
