@@ -1,5 +1,7 @@
 {{define "content"}}
+<div class="admin-page">
   <h1>Administrasi</h1>
+  <p class="muted">Kelola akun, keanggotaan group, dan akses ke database.</p>
   {{if .Error}}
     <p class="alert error" role="alert">{{.Error}}</p>
   {{end}}
@@ -9,70 +11,58 @@
   {{if not .Ready}}
     <p>Pengelolaan platform belum tersedia.</p>
   {{else}}
-    <nav class="buttons">
+    <nav class="admin-nav" aria-label="Bagian administrasi">
       <a href="#users">Pengguna</a>
       <a href="#groups">Group</a>
       <a href="#grants">Hak akses</a>
       <a href="#targets">Koneksi database</a>
     </nav>
+    <section class="admin-section" aria-labelledby="users">
     <h2 id="users">Pengguna</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Username</th>
-            <th>Admin platform</th>
-            <th>Aktif</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .Users}}
-            <tr>
-              <td>{{.ID}}</td>
-              <td>{{.Username}}</td>
-              <td>{{if .PlatformAdmin}}Ya{{else}}Tidak{{end}}</td>
-              <td>{{if .Active}}Ya{{else}}Tidak{{end}}</td>
-            </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    <details>
+    <p class="muted">Buka akun yang ingin diubah. Data saat ini sudah terisi di dalam form.</p>
+    <div class="admin-user-list">
+    {{range .Users}}
+    <details class="admin-disclosure admin-user">
       <summary>
-        Ubah pengguna / nonaktifkan akun
+        <span class="admin-user-name"><strong>{{.Username}}</strong> <small class="muted">ID {{.ID}}</small></span>
+        <span>{{if .PlatformAdmin}}Admin platform{{else}}Pengguna{{end}}</span>
+        <span class="admin-badge {{if .Active}}is-active{{else}}is-inactive{{end}}">{{if .Active}}Aktif{{else}}Nonaktif{{end}}</span>
+        <span class="admin-edit-label">Ubah pengguna</span>
       </summary>
       <form method="post" action="/admin" class="admin-form">
-        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
         <input type="hidden" name="action" value="update-user">
-        <label>
-          Pengguna
-          <select name="user_id">
-            {{range .Users}}
-              <option value="{{.ID}}">{{.Username}} ({{.ID}})</option>
-            {{end}}
-          </select>
-        </label>
+        <input type="hidden" name="user_id" value="{{.ID}}">
         <label>
           Username
-          <input name="username" required maxlength="100">
+          <input name="username" value="{{.Username}}" required maxlength="100" autocomplete="off">
         </label>
         <label>
-          Password baru (kosong berarti tetap)
-          <input type="password" name="password" autocomplete="new-password">
+          Password baru
+          <input type="password" name="password" minlength="10" maxlength="72" autocomplete="new-password">
+          <small class="admin-help">Kosongkan jika tidak ingin mengganti password.</small>
+        </label>
+        <fieldset class="admin-options">
+        <legend>Status dan peran akun</legend>
+        <label class="check">
+          <input type="checkbox" name="is_active" value="yes" {{if .Active}}checked{{end}}>
+          Akun aktif
         </label>
         <label class="check">
-          <input type="checkbox" name="is_active" value="yes" checked>
-          Aktif
-        </label>
-        <label class="check">
-          <input type="checkbox" name="is_platform_admin" value="yes">
+          <input type="checkbox" name="is_platform_admin" value="yes" {{if .PlatformAdmin}}checked{{end}}>
           Admin platform
         </label>
-        <button>Simpan pengguna</button>
+        <p class="admin-help">Nonaktifkan akun dengan menghapus centang “Akun aktif”. Admin platform dapat mengelola halaman administrasi.</p>
+        </fieldset>
+        <div class="admin-actions"><button type="submit" class="primary">Simpan pengguna</button></div>
       </form>
     </details>
-    <form method="post" action="/admin" class="admin-form">
+    {{else}}
+    <p class="empty">Belum ada pengguna.</p>
+    {{end}}
+    </div>
+    <form method="post" action="/admin" class="admin-form admin-panel">
+      <h3>Tambah pengguna</h3>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <input type="hidden" name="action" value="create-user">
       <label>
@@ -82,26 +72,33 @@
       <label>
         Password baru
         <input type="password" name="password" required minlength="10" maxlength="72" autocomplete="new-password">
+          <small class="admin-help">Gunakan password sepanjang 10–72 byte.</small>
       </label>
       <label class="check">
         <input type="checkbox" name="is_platform_admin" value="yes">
         Admin platform
       </label>
-      <button type="submit">Tambah pengguna</button>
+      <div class="admin-actions"><button type="submit" class="primary">Tambah pengguna</button></div>
     </form>
+    </section>
+    <section class="admin-section" aria-labelledby="groups">
     <h2 id="groups">Group dan anggota</h2>
-    <form method="post" action="/admin" class="admin-form">
+    <p class="muted">Gabungkan pengguna dalam group, lalu berikan hak akses database kepada group tersebut.</p>
+    <form method="post" action="/admin" class="admin-form admin-panel">
+      <h3>Tambah group</h3>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <input type="hidden" name="action" value="create-group">
       <label>
         Nama group
         <input name="name" required maxlength="100">
       </label>
-      <button type="submit">Tambah group</button>
+      <div class="admin-actions"><button type="submit" class="primary">Tambah group</button></div>
     </form>
+    <div class="admin-group-list">
     {{range .Groups}}
+      <article class="admin-panel">
       <h3>{{.Name}} <small class="tag">ID {{.ID}}</small></h3>
-      <details>
+      <details class="admin-disclosure">
         <summary>
           Ubah atau hapus group
         </summary>
@@ -112,12 +109,15 @@
             Nama group
             <input name="name" value="{{.Name}}" required maxlength="100">
           </label>
-          <button name="action" value="rename-group">Simpan nama</button>
-          <button name="action" value="delete-group">Hapus group dan cabut akses anggota</button>
+          <div class="admin-actions">
+            <button name="action" value="rename-group" class="primary">Simpan nama</button>
+            <button name="action" value="delete-group" class="danger">Hapus group dan cabut akses anggota</button>
+          </div>
         </form>
       </details>
       {{$groupID := .ID}}
-      <ul>
+      <h4>Anggota group</h4>
+      <ul class="admin-members">
         {{range .Members}}
           <li>
             {{.Username}}
@@ -126,7 +126,7 @@
               <input type="hidden" name="action" value="remove-member">
               <input type="hidden" name="group_id" value="{{$groupID}}">
               <input type="hidden" name="user_id" value="{{.ID}}">
-              <button type="submit">Keluarkan anggota</button>
+              <button type="submit" class="danger">Keluarkan anggota</button>
             </form>
           </li>
         {{else}}
@@ -147,48 +147,54 @@
             {{end}}
           </select>
         </label>
-        <button type="submit">Tambah anggota</button>
+        <div class="admin-actions"><button type="submit">Tambah anggota</button></div>
       </form>
+      </article>
     {{else}}
       <p>Belum ada group.</p>
     {{end}}
+    </div>
+    </section>
+    <section class="admin-section" aria-labelledby="grants">
     <h2 id="grants">Hak akses database</h2>
-    <p>Hak efektif adalah izin tertinggi dari seluruh group pengguna. Admin platform juga memerlukan grant untuk membuka target.</p>
+    <p class="muted">Pengguna mendapat izin tertinggi dari seluruh group yang diikutinya. Admin platform juga memerlukan hak akses untuk membuka database.</p>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Group ID</th>
-            <th>Database ID</th>
+            <th>Group</th>
+            <th>Database</th>
             <th>Izin</th>
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
           {{range .Grants}}
+            {{$grant := .}}
             <tr>
-              <td>{{.GroupID}}</td>
-              <td>{{.DatabaseID}}</td>
-              <td>{{.Permission}}</td>
+              <td>{{range $.Groups}}{{if eq .ID $grant.GroupID}}{{.Name}} · {{end}}{{end}}<span class="muted">ID {{.GroupID}}</span></td>
+              <td>{{range $.Targets}}{{if eq .ID $grant.DatabaseID}}{{.Name}} · {{end}}{{end}}<span class="muted">ID {{.DatabaseID}}</span></td>
+              <td>{{if eq .Permission "EDIT"}}Lihat dan edit{{else}}Hanya lihat{{end}}</td>
               <td>
                 <form method="post" action="/admin">
                   <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
                   <input type="hidden" name="action" value="remove-grant">
                   <input type="hidden" name="group_id" value="{{.GroupID}}">
                   <input type="hidden" name="target_id" value="{{.DatabaseID}}">
-                  <button type="submit">Cabut grant</button>
+                  <button type="submit" class="danger">Cabut grant</button>
                 </form>
               </td>
             </tr>
           {{else}}
             <tr>
-              <td colspan="4">Belum ada grant.</td>
+              <td colspan="4">Belum ada hak akses database yang diberikan.</td>
             </tr>
           {{end}}
         </tbody>
       </table>
     </div>
-    <form method="post" action="/admin" class="admin-form">
+    <form method="post" action="/admin" class="admin-form admin-panel">
+      <h3>Tambah atau ubah hak akses</h3>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <input type="hidden" name="action" value="set-grant">
       <label>
@@ -212,14 +218,17 @@
       <label>
         Izin
         <select name="permission">
-          <option value="VIEW">View Only</option>
-          <option value="EDIT">View + Edit</option>
+          <option value="VIEW">Hanya lihat (VIEW)</option>
+          <option value="EDIT">Lihat dan edit (EDIT)</option>
         </select>
       </label>
-      <button type="submit">Simpan grant</button>
+      <div class="admin-actions"><button type="submit" class="primary">Simpan grant</button></div>
     </form>
-    <p class="muted">Pencabutan membership/grant dan penurunan izin mengharuskan pengguna terkait login kembali. Penambahan hak memicu rotasi session.</p>
+    <p class="admin-help">Jika keanggotaan atau hak akses dicabut, atau izin diturunkan, pengguna terkait perlu login kembali.</p>
+    </section>
+    <section class="admin-section" aria-labelledby="targets">
     <h2 id="targets">Koneksi database</h2>
+    <p class="muted">Daftarkan database yang akan dikelola. Gunakan “Ubah” untuk mengedit koneksi yang sudah ada.</p>
     <div class="table-wrap">
       <table>
         <thead>
@@ -238,8 +247,8 @@
               <td>{{.ID}}</td>
               <td>{{.Name}}</td>
               <td>{{.Database}}</td>
-              <td>{{.Host}}:{{.Port}}</td>
-              <td>{{if .Active}}Ya{{else}}Tidak{{end}}</td>
+              <td>{{if eq .Driver "sqlite"}}File lokal (SQLite){{else}}{{.Host}}:{{.Port}}{{end}}</td>
+              <td><span class="admin-badge {{if .Active}}is-active{{else}}is-inactive{{end}}">{{if .Active}}Aktif{{else}}Nonaktif{{end}}</span></td>
               <td>
                 <a href="/admin?target={{.ID}}#target-form">Ubah</a>
                 {{if .Active}}
@@ -247,7 +256,7 @@
                     <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
                     <input type="hidden" name="target_id" value="{{.ID}}">
                     <button name="action" value="test-target">Test koneksi</button>
-                    <button name="action" value="disable-target">Nonaktifkan</button>
+                    <button name="action" value="disable-target" class="danger">Nonaktifkan</button>
                   </form>
                 {{end}}
               </td>
@@ -260,7 +269,7 @@
         </tbody>
       </table>
     </div>
-    <form method="post" action="/admin" class="admin-form" id="target-form">
+    <form method="post" action="/admin" class="admin-form admin-panel" id="target-form">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       {{if .Editing}}
         <h3>Ubah koneksi</h3>
@@ -322,10 +331,14 @@
         <input type="checkbox" name="is_active" value="yes" {{if .Editing}}{{if .Editing.Active}}checked{{end}}{{else}}checked{{end}}>
         Aktif
       </label>
-      <button type="submit">Simpan koneksi</button>
+      <div class="admin-actions">
+      <button type="submit" class="primary">Simpan koneksi</button>
       {{if .Editing}}
         <a href="/admin#targets">Batal</a>
       {{end}}
+      </div>
     </form>
+    </section>
   {{end}}
+</div>
 {{end}}
