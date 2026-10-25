@@ -34,8 +34,7 @@ func (a *API) Router() http.Handler {
 	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	a.explorerRoutes(mux)
-	a.migrationRoutes(mux)
-	a.planRoutes(mux)
+	a.webRoutes(mux)
 	return mux
 }
 
