@@ -16,13 +16,14 @@ import (
 var templates = map[string]*template.Template{}
 
 func init() {
-	pages := []string{"login", "databases", "explorer", "migrations", "admin", "error"}
+	pages := []string{"login", "databases", "explorer", "migrations", "admin", "error", "diff"}
 	for _, name := range pages {
 		templates[name] = template.Must(template.New(name).Funcs(templateFuncs).ParseFS(web.Files, "templates/layout.html", "templates/"+name+".html"))
 	}
 }
 
 var templateFuncs = template.FuncMap{
+	"sslModes": func() []string { return []string{"disable", "require", "verify-ca", "verify-full"} },
 	"constraintKind": func(kind string) string {
 		switch kind {
 		case "p":
@@ -65,6 +66,7 @@ func (a *API) webRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /login", a.submitLogin)
 	mux.HandleFunc("POST /logout", a.loggedIn(a.submitLogout))
 	mux.HandleFunc("GET /admin", a.loggedIn(a.adminPage))
+	mux.HandleFunc("POST /admin", a.loggedIn(a.submitAdmin))
 
 	if a.targets == nil {
 		return
@@ -80,6 +82,8 @@ func (a *API) webRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /databases/{id}/migrations", a.loggedIn(a.migrationsPage))
 	mux.HandleFunc("POST /databases/{id}/migrations", a.loggedIn(a.submitMigration))
 	mux.HandleFunc("POST /databases/{id}/migrations/{attempt}/reconcile", a.loggedIn(a.reconcileAttempt))
+	mux.HandleFunc("GET /databases/{id}/diff", a.loggedIn(a.schemaDiffPage))
+	mux.HandleFunc("POST /databases/{id}/diff", a.loggedIn(a.schemaDiffPage))
 }
 
 func (a *API) loggedIn(next func(http.ResponseWriter, *http.Request, auth.AuthenticationResult)) http.HandlerFunc {
@@ -89,7 +93,8 @@ func (a *API) loggedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		if r.Method == http.MethodPost && !validFormToken(r, session) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		if r.Method == http.MethodPost && (!a.validOrigin(r) || !validFormToken(r, session)) {
 			a.showError(w, http.StatusForbidden, session, "Form sudah kedaluwarsa. Muat ulang halaman lalu coba lagi.")
 			return
 		}
