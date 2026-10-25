@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/api"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
 
@@ -42,6 +42,7 @@ func main() {
 
 	// Buat API dengan service autentikasi.
 	app := api.Create(authService, secureCookies)
+	app.UseUsers(userRepository)
 
 	// Create server
 	server := &http.Server{

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 )
 
@@ -14,6 +13,7 @@ type API struct {
 	secureCookies bool
 	targets       TargetSource
 	dataDir       string
+	users         AdminUserSource
 }
 
 // Bikin objek API baru dengan service yang dibutuhkan
@@ -31,6 +31,7 @@ func (a *API) Router() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("GET /api/auth/current-user", a.currentUser)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
+	a.userRoutes(mux)
 	a.explorerRoutes(mux)
 	return mux
 }
