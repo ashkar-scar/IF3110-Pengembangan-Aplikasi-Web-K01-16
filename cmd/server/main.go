@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"net/http"
 	"os"
@@ -43,15 +44,39 @@ func main() {
 	// Buat API dengan service autentikasi.
 	app := api.Create(authService, secureCookies)
 	app.UseUsers(userRepository)
+	groupRepository := store.NewGroupRepository(database)
+	permissionRepository := store.NewPermissionRepository(database)
+	key, err := base64.StdEncoding.DecodeString(os.Getenv("TARGET_CREDENTIAL_KEY"))
+	if err != nil {
+		log.Fatal("TARGET_CREDENTIAL_KEY harus base64 valid")
+	}
+	targetRepository, err := store.NewTargetRepository(database, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = ".local/data"
+	}
+	app.UseGroups(groupRepository)
+	app.UseGrants(permissionRepository)
+	app.UseDatabaseRegistry(targetRepository)
+	app.UseTargets(api.NewRegistryTargets(targetRepository, permissionRepository), dataDir)
+	app.UseMigrations(store.NewMigrationRepository(database))
+
+	address := os.Getenv("APP_ADDR")
+	if address == "" {
+		address = ":8080"
+	}
 
 	// Create server
 	server := &http.Server{
-		Addr:              ":8080",
+		Addr:              address,
 		Handler:           app.Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("Server running in: http://localhost%s", server.Addr)
+	log.Printf("Server listening at %s", server.Addr)
 
 	// Jalanin server
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
