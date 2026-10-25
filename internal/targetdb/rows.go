@@ -40,6 +40,24 @@ func (c *Connection) Rows(ctx context.Context, schema, name string, limit, offse
 		}
 	}
 	query := "SELECT * FROM " + Quote(schema) + "." + Quote(name)
+	if len(order) == 0 {
+		if c.Driver == "postgres" {
+			order = append(order, "ctid")
+		} else {
+			for _, alias := range []string{"rowid", "_rowid_", "oid"} {
+				found := false
+				for _, col := range table.Columns {
+					if strings.EqualFold(col.Name, alias) {
+						found = true
+					}
+				}
+				if !found {
+					order = append(order, Quote(alias))
+					break
+				}
+			}
+		}
+	}
 	if len(order) > 0 {
 		query += " ORDER BY " + strings.Join(order, ",")
 	}
