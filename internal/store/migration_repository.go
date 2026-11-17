@@ -14,24 +14,42 @@ import (
 //go:embed migration_schema.sql
 var MigrationSchema string
 
-var ErrDraftNotFound = errors.New("draft tidak ditemukan")
-var ErrAttemptNotFound = errors.New("attempt tidak ditemukan")
-var ErrDraftConflict = errors.New("draft berubah, sudah diterapkan, atau sedang dieksekusi")
+var (
+	ErrDraftNotFound   = errors.New("draft tidak ditemukan")
+	ErrAttemptNotFound = errors.New("attempt tidak ditemukan")
+	ErrDraftConflict   = errors.New("draft berubah, sudah diterapkan, atau sedang dieksekusi")
+)
 
-const draftColumns = "id, target_id, description, sql_text, created_by, revision, base_version, fingerprint, created_at, updated_at"
-const attemptColumns = "id, target_id, draft_id, draft_revision, description, sql_text, actor_id, actor_name, base_version, version, status, safe_error, started_at, finished_at"
+const (
+	draftColumns   = "id, target_id, description, sql_text, created_by, revision, base_version, fingerprint, created_at, updated_at"
+	attemptColumns = "id, target_id, draft_id, draft_revision, description, sql_text, actor_id, actor_name, base_version, version, status, safe_error, started_at, finished_at"
+)
 
+// Repository draft dan riwayat attempt migration di database platform.
 type MigrationRepository struct {
 	database *pgxpool.Pool
 }
 
+// Buat MigrationRepository dari pool koneksi platform.
 func NewMigrationRepository(database *pgxpool.Pool) *MigrationRepository {
 	return &MigrationRepository{database: database}
 }
 
+// Petakan satu baris query ke core.Draft.
 func scanDraft(row pgx.Row) (core.Draft, error) {
 	var draft core.Draft
-	err := row.Scan(&draft.ID, &draft.TargetID, &draft.Description, &draft.SQL, &draft.CreatedBy, &draft.Revision, &draft.BaseVersion, &draft.Fingerprint, &draft.CreatedAt, &draft.UpdatedAt)
+	err := row.Scan(
+		&draft.ID,
+		&draft.TargetID,
+		&draft.Description,
+		&draft.SQL,
+		&draft.CreatedBy,
+		&draft.Revision,
+		&draft.BaseVersion,
+		&draft.Fingerprint,
+		&draft.CreatedAt,
+		&draft.UpdatedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return draft, ErrDraftNotFound
 	}
@@ -39,9 +57,25 @@ func scanDraft(row pgx.Row) (core.Draft, error) {
 	return draft, err
 }
 
+// Petakan satu baris query ke core.Attempt.
 func scanAttempt(row pgx.Row) (core.Attempt, error) {
 	var attempt core.Attempt
-	err := row.Scan(&attempt.ID, &attempt.TargetID, &attempt.DraftID, &attempt.Revision, &attempt.Description, &attempt.SQL, &attempt.ActorID, &attempt.ActorName, &attempt.BaseVersion, &attempt.Version, &attempt.Status, &attempt.Error, &attempt.StartedAt, &attempt.FinishedAt)
+	err := row.Scan(
+		&attempt.ID,
+		&attempt.TargetID,
+		&attempt.DraftID,
+		&attempt.Revision,
+		&attempt.Description,
+		&attempt.SQL,
+		&attempt.ActorID,
+		&attempt.ActorName,
+		&attempt.BaseVersion,
+		&attempt.Version,
+		&attempt.Status,
+		&attempt.Error,
+		&attempt.StartedAt,
+		&attempt.FinishedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return attempt, ErrAttemptNotFound
 	}
@@ -49,8 +83,15 @@ func scanAttempt(row pgx.Row) (core.Attempt, error) {
 	return attempt, err
 }
 
+// Ambil semua draft target dari yang terbaru diperbarui.
 func (repository *MigrationRepository) ListDrafts(ctx context.Context, targetID int64) ([]core.Draft, error) {
-	rows, err := repository.database.Query(ctx, "SELECT "+draftColumns+" FROM migration_drafts WHERE target_id = $1 ORDER BY updated_at DESC, id DESC", targetID)
+	query := `
+		SELECT ` + draftColumns + `
+		FROM migration_drafts
+		WHERE target_id = $1
+		ORDER BY updated_at DESC, id DESC
+	`
+	rows, err := repository.database.Query(ctx, query, targetID)
 	if err != nil {
 		return nil, fmt.Errorf("Gagal membaca draft: %w", err)
 	}
@@ -64,35 +105,79 @@ func (repository *MigrationRepository) ListDrafts(ctx context.Context, targetID 
 		}
 		drafts = append(drafts, draft)
 	}
+
 	return drafts, rows.Err()
 }
 
+// Ambil satu draft milik database target.
 func (repository *MigrationRepository) GetDraft(ctx context.Context, targetID, draftID int64) (core.Draft, error) {
-	return scanDraft(repository.database.QueryRow(ctx, "SELECT "+draftColumns+" FROM migration_drafts WHERE target_id = $1 AND id = $2", targetID, draftID))
+	query := `
+		SELECT ` + draftColumns + `
+		FROM migration_drafts
+		WHERE target_id = $1
+		  AND id = $2
+	`
+	return scanDraft(repository.database.QueryRow(ctx, query, targetID, draftID))
 }
 
+// Simpan draft baru mulai dari revisi 1.
 func (repository *MigrationRepository) CreateDraft(ctx context.Context, draft core.Draft) (core.Draft, error) {
-	const query = `
-		INSERT INTO migration_drafts (target_id, description, sql_text, created_by, base_version, fingerprint)
+	query := `
+		INSERT INTO migration_drafts (
+			target_id,
+			description,
+			sql_text,
+			created_by,
+			base_version,
+			fingerprint
+		)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING ` + draftColumns
 
-	return scanDraft(repository.database.QueryRow(ctx, query, draft.TargetID, draft.Description, draft.SQL, draft.CreatedBy, draft.BaseVersion, draft.Fingerprint))
+	return scanDraft(repository.database.QueryRow(
+		ctx,
+		query,
+		draft.TargetID,
+		draft.Description,
+		draft.SQL,
+		draft.CreatedBy,
+		draft.BaseVersion,
+		draft.Fingerprint,
+	))
 }
 
 // UpdateDraft hanya berhasil jika revisi masih sama dan draft belum pernah dijalankan dengan hasil final atau sedang berjalan
 func (repository *MigrationRepository) UpdateDraft(ctx context.Context, draft core.Draft) (core.Draft, error) {
-	const query = `
+	query := `
 		UPDATE migration_drafts AS d
-		SET description = $1, sql_text = $2, base_version = $3, fingerprint = $4, revision = revision + 1, updated_at = now()
-		WHERE d.target_id = $5 AND d.id = $6 AND d.revision = $7
+		SET
+			description = $1,
+			sql_text = $2,
+			base_version = $3,
+			fingerprint = $4,
+			revision = revision + 1,
+			updated_at = now()
+		WHERE d.target_id = $5
+		  AND d.id = $6
+		  AND d.revision = $7
 		  AND NOT EXISTS (
 			SELECT FROM migration_attempts AS a
-			WHERE a.draft_id = d.id AND a.status IN ('SUCCESS', 'RUNNING', 'UNKNOWN')
+			WHERE a.draft_id = d.id
+			  AND a.status IN ('SUCCESS', 'RUNNING', 'UNKNOWN')
 		  )
 		RETURNING ` + draftColumns
 
-	updated, err := scanDraft(repository.database.QueryRow(ctx, query, draft.Description, draft.SQL, draft.BaseVersion, draft.Fingerprint, draft.TargetID, draft.ID, draft.Revision))
+	updated, err := scanDraft(repository.database.QueryRow(
+		ctx,
+		query,
+		draft.Description,
+		draft.SQL,
+		draft.BaseVersion,
+		draft.Fingerprint,
+		draft.TargetID,
+		draft.ID,
+		draft.Revision,
+	))
 	if errors.Is(err, ErrDraftNotFound) {
 		return updated, ErrDraftConflict
 	}
@@ -100,14 +185,29 @@ func (repository *MigrationRepository) UpdateDraft(ctx context.Context, draft co
 	return updated, err
 }
 
-func (repository *MigrationRepository) BeginAttempt(ctx context.Context, targetID, draftID int64, revision int, attemptID string, actor core.User) (attempt core.Attempt, fingerprint string, created bool, err error) {
+// Kunci revisi draft jadi satu attempt RUNNING secara idempoten.
+func (repository *MigrationRepository) BeginAttempt(
+	ctx context.Context,
+	targetID, draftID int64,
+	revision int,
+	attemptID string,
+	actor core.User,
+) (attempt core.Attempt, fingerprint string, created bool, err error) {
 	transaction, err := repository.database.Begin(ctx)
 	if err != nil {
 		return attempt, "", false, fmt.Errorf("Gagal memulai transaksi attempt: %w", err)
 	}
 	defer transaction.Rollback(ctx)
 
-	draft, err := scanDraft(transaction.QueryRow(ctx, "SELECT "+draftColumns+" FROM migration_drafts WHERE target_id = $1 AND id = $2 FOR UPDATE", targetID, draftID))
+	// Kunci baris draft agar submit paralel pada revisi sama berbagi satu attempt.
+	lockDraftQuery := `
+		SELECT ` + draftColumns + `
+		FROM migration_drafts
+		WHERE target_id = $1
+		  AND id = $2
+		FOR UPDATE
+	`
+	draft, err := scanDraft(transaction.QueryRow(ctx, lockDraftQuery, targetID, draftID))
 	if err != nil {
 		return attempt, "", false, err
 	}
@@ -115,30 +215,72 @@ func (repository *MigrationRepository) BeginAttempt(ctx context.Context, targetI
 		return attempt, "", false, ErrDraftConflict
 	}
 
-	const insert = `
-		INSERT INTO migration_attempts (id, target_id, draft_id, draft_revision, description, sql_text, actor_id, actor_name, base_version, status)
+	const insertAttemptQuery = `
+		INSERT INTO migration_attempts (
+			id,
+			target_id,
+			draft_id,
+			draft_revision,
+			description,
+			sql_text,
+			actor_id,
+			actor_name,
+			base_version,
+			status
+		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RUNNING')
-		ON CONFLICT (draft_id, draft_revision) DO NOTHING`
-	tag, err := transaction.Exec(ctx, insert, attemptID, draft.TargetID, draft.ID, draft.Revision, draft.Description, draft.SQL, actor.ID, actor.Username, draft.BaseVersion)
+		ON CONFLICT (draft_id, draft_revision) DO NOTHING
+	`
+	tag, err := transaction.Exec(
+		ctx,
+		insertAttemptQuery,
+		attemptID,
+		draft.TargetID,
+		draft.ID,
+		draft.Revision,
+		draft.Description,
+		draft.SQL,
+		actor.ID,
+		actor.Username,
+		draft.BaseVersion,
+	)
 	if err != nil {
 		return attempt, "", false, fmt.Errorf("Gagal mencatat attempt: %w", err)
 	}
 
-	attempt, err = scanAttempt(transaction.QueryRow(ctx, "SELECT "+attemptColumns+" FROM migration_attempts WHERE draft_id = $1 AND draft_revision = $2", draft.ID, draft.Revision))
+	fetchAttemptQuery := `
+		SELECT ` + attemptColumns + `
+		FROM migration_attempts
+		WHERE draft_id = $1
+		  AND draft_revision = $2
+	`
+	attempt, err = scanAttempt(transaction.QueryRow(ctx, fetchAttemptQuery, draft.ID, draft.Revision))
 	if err != nil {
 		return attempt, "", false, err
 	}
-	if err = transaction.Commit(ctx); err != nil {
+	err = transaction.Commit(ctx)
+	if err != nil {
 		return attempt, "", false, fmt.Errorf("Gagal menyimpan attempt: %w", err)
 	}
 
 	return attempt, draft.Fingerprint, tag.RowsAffected() == 1, nil
 }
 
-func (repository *MigrationRepository) FinishAttempt(ctx context.Context, attemptID string, status core.AttemptStatus, version *int64, message string) (core.Attempt, error) {
-	const query = `
+// Simpan status akhir, versi, dan pesan error aman attempt.
+func (repository *MigrationRepository) FinishAttempt(
+	ctx context.Context,
+	attemptID string,
+	status core.AttemptStatus,
+	version *int64,
+	message string,
+) (core.Attempt, error) {
+	query := `
 		UPDATE migration_attempts
-		SET status = $1, version = $2, safe_error = $3, finished_at = now()
+		SET
+			status = $1,
+			version = $2,
+			safe_error = $3,
+			finished_at = now()
 		WHERE id = $4
 		RETURNING ` + attemptColumns
 
@@ -147,13 +289,21 @@ func (repository *MigrationRepository) FinishAttempt(ctx context.Context, attemp
 
 const AttemptsPerPage = 200
 
-// ListAttempts returns a page plus one lookahead row for navigation.
+// Ambil satu halaman riwayat attempt plus satu baris lookahead.
 func (repository *MigrationRepository) ListAttempts(ctx context.Context, targetID int64, offsets ...int) ([]core.Attempt, error) {
 	offset := 0
 	if len(offsets) > 0 {
 		offset = max(offsets[0], 0)
 	}
-	rows, err := repository.database.Query(ctx, "SELECT "+attemptColumns+" FROM migration_attempts WHERE target_id = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3", targetID, AttemptsPerPage+1, offset)
+
+	query := `
+		SELECT ` + attemptColumns + `
+		FROM migration_attempts
+		WHERE target_id = $1
+		ORDER BY started_at DESC, id DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := repository.database.Query(ctx, query, targetID, AttemptsPerPage+1, offset)
 	if err != nil {
 		return nil, fmt.Errorf("Gagal membaca riwayat migration: %w", err)
 	}
@@ -165,13 +315,19 @@ func (repository *MigrationRepository) ListAttempts(ctx context.Context, targetI
 		if err != nil {
 			return nil, err
 		}
-
 		attempts = append(attempts, attempt)
 	}
 
 	return attempts, rows.Err()
 }
 
+// Ambil satu attempt milik database target.
 func (repository *MigrationRepository) GetAttempt(ctx context.Context, targetID int64, attemptID string) (core.Attempt, error) {
-	return scanAttempt(repository.database.QueryRow(ctx, "SELECT "+attemptColumns+" FROM migration_attempts WHERE target_id = $1 AND id = $2", targetID, attemptID))
+	query := `
+		SELECT ` + attemptColumns + `
+		FROM migration_attempts
+		WHERE target_id = $1
+		  AND id = $2
+	`
+	return scanAttempt(repository.database.QueryRow(ctx, query, targetID, attemptID))
 }

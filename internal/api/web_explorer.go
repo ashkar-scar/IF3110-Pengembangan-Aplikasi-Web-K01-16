@@ -42,11 +42,19 @@ type explorerPage struct {
 	HasMore bool
 }
 
+// Offset halaman sebelumnya.
 func (p explorerPage) PrevOffset() int { return max(p.Offset-rowsPerPage, 0) }
-func (p explorerPage) NextOffset() int { return p.Offset + rowsPerPage }
-func (p explorerPage) FirstRow() int   { return p.Offset + 1 }
-func (p explorerPage) LastRow() int    { return p.Offset + len(p.Rows) }
 
+// Offset halaman berikutnya.
+func (p explorerPage) NextOffset() int { return p.Offset + rowsPerPage }
+
+// Nomor baris pertama di halaman ini.
+func (p explorerPage) FirstRow() int { return p.Offset + 1 }
+
+// Nomor baris terakhir di halaman ini.
+func (p explorerPage) LastRow() int { return p.Offset + len(p.Rows) }
+
+// Tampilkan halaman daftar database target.
 func (a *API) databasesPage(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	targets, err := a.targets.Targets(r.Context(), session.User.ID)
 	if err != nil {
@@ -55,15 +63,20 @@ func (a *API) databasesPage(w http.ResponseWriter, r *http.Request, session auth
 		return
 	}
 
-	render(w, http.StatusOK, "databases", databasesPage{base: newBase("Database", session), Targets: targets})
+	render(w, http.StatusOK, "databases", databasesPage{
+		base:    newBase("Database", session),
+		Targets: targets,
+	})
 }
 
+// Ambil target database atau render halaman error bila tidak berhak.
 func (a *API) pageTarget(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult, required core.Permission) (Target, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		a.showError(w, http.StatusNotFound, session, "Database tidak ditemukan.")
 		return Target{}, false
 	}
+
 	target, err := a.targets.Target(r.Context(), session.User.ID, id)
 	switch {
 	case errors.Is(err, ErrTargetNotFound):
@@ -77,16 +90,21 @@ func (a *API) pageTarget(w http.ResponseWriter, r *http.Request, session auth.Au
 		a.showError(w, http.StatusForbidden, session, "Anda tidak memiliki akses untuk tindakan ini.")
 		return Target{}, false
 	}
+
 	return target, true
 }
 
+// Tampilkan halaman explorer untuk schema, struktur tabel, dan data.
 func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	target, ok := a.pageTarget(w, r, session, core.PermissionView)
 	if !ok {
 		return
 	}
 
-	page := explorerPage{base: newBase(target.Name, session), Target: target}
+	page := explorerPage{
+		base:   newBase(target.Name, session),
+		Target: target,
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
@@ -111,7 +129,6 @@ func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.
 	query := r.URL.Query()
 	page.Schemas = snapshot.Schemas()
 	page.Schema = query.Get("schema")
-
 	if page.Schema == "" && len(page.Schemas) > 0 {
 		page.Schema = page.Schemas[0]
 	}
@@ -127,13 +144,13 @@ func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.
 		}
 	}
 
-	name := query.Get("table")
-	if name == "" {
+	tableName := query.Get("table")
+	if tableName == "" {
 		render(w, http.StatusOK, "explorer", page)
 		return
 	}
 
-	table, err := snapshot.Find(page.Schema, name)
+	table, err := snapshot.Find(page.Schema, tableName)
 	if err != nil {
 		page.Error = "Tabel tidak ditemukan."
 		render(w, http.StatusNotFound, "explorer", page)
@@ -151,16 +168,26 @@ func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.
 	}
 
 	page.Offset, _ = strconv.Atoi(query.Get("offset"))
-	rows, err := conn.Rows(ctx, page.Schema, name, rowsPerPage, page.Offset)
+	err = loadExplorerRows(ctx, conn, &page, tableName)
 	if err != nil {
 		page.Error = "Data tabel tidak dapat dibaca."
 		render(w, http.StatusUnprocessableEntity, "explorer", page)
 		return
 	}
 
-	page.Columns = rows.Columns
-	page.HasMore = rows.HasMore
-	for _, row := range rows.Rows {
+	render(w, http.StatusOK, "explorer", page)
+}
+
+// Muat satu halaman baris tabel lalu konversi ke sel HTML.
+func loadExplorerRows(ctx context.Context, conn *targetdb.Connection, page *explorerPage, tableName string) error {
+	rowPage, err := conn.Rows(ctx, page.Schema, tableName, rowsPerPage, page.Offset)
+	if err != nil {
+		return err
+	}
+
+	page.Columns = rowPage.Columns
+	page.HasMore = rowPage.HasMore
+	for _, row := range rowPage.Rows {
 		cells := make([]cell, len(row))
 		for i, value := range row {
 			if value == nil {
@@ -171,6 +198,5 @@ func (a *API) explorerPage(w http.ResponseWriter, r *http.Request, session auth.
 		}
 		page.Rows = append(page.Rows, cells)
 	}
-
-	render(w, http.StatusOK, "explorer", page)
+	return nil
 }

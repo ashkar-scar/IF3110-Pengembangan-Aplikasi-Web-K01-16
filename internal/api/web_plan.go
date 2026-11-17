@@ -26,21 +26,24 @@ type planNode struct {
 	Children  []planNode
 }
 
+// Jalankan EXPLAIN untuk satu statement SQL tanpa mengeksekusinya.
 func (a *API) explain(ctx context.Context, target Target, sql string) (planView, error) {
-	if _, err := sqlguard.Plan(sql); err != nil {
+	_, err := sqlguard.Plan(sql)
+	if err != nil {
 		return planView{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+
+	planCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	conn, err := a.open(ctx, target)
+	conn, err := a.open(planCtx, target)
 	if err != nil {
 		log.Printf("Database target tidak dapat diakses: %v", err)
 		return planView{}, errors.New("Database target tidak dapat diakses.")
 	}
 	defer conn.Close()
 
-	plan, err := conn.Explain(ctx, sql)
+	plan, err := conn.Explain(planCtx, sql)
 	if err != nil {
 		return planView{}, errors.New("Query tidak dapat direncanakan. Periksa SQL dan nama tabel yang dipakai.")
 	}
@@ -60,31 +63,32 @@ func (a *API) explain(ctx context.Context, target Target, sql string) (planView,
 	return view, nil
 }
 
+// Susun node pohon execution plan PostgreSQL secara rekursif.
 func newPlanNode(value any) planNode {
 	data, _ := value.(map[string]any)
 	text := func(key string) string {
-		if value, ok := data[key]; ok {
-			return fmt.Sprint(value)
+		if v, ok := data[key]; ok {
+			return fmt.Sprint(v)
 		}
 		return ""
 	}
 
-	title := []string{text("Node Type")}
+	titleParts := []string{text("Node Type")}
 	if operation := text("Operation"); operation != "" {
-		title = append(title, operation)
+		titleParts = append(titleParts, operation)
 	}
 	if join := text("Join Type"); join != "" {
-		title = append(title, join+" join")
+		titleParts = append(titleParts, join+" join")
 	}
 	if relation := text("Relation Name"); relation != "" {
-		title = append(title, "on "+relation)
+		titleParts = append(titleParts, "on "+relation)
 	}
 	if index := text("Index Name"); index != "" {
-		title = append(title, "using "+index)
+		titleParts = append(titleParts, "using "+index)
 	}
 
 	node := planNode{
-		Title:    strings.Join(title, " · "),
+		Title:    strings.Join(titleParts, " · "),
 		Estimate: fmt.Sprintf("cost %s..%s · rows %s", text("Startup Cost"), text("Total Cost"), text("Plan Rows")),
 	}
 	for _, key := range []string{"Index Cond", "Hash Cond", "Merge Cond", "Filter"} {
@@ -98,6 +102,6 @@ func newPlanNode(value any) planNode {
 	for _, child := range children {
 		node.Children = append(node.Children, newPlanNode(child))
 	}
-	
+
 	return node
 }

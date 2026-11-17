@@ -12,6 +12,7 @@ import (
 
 var ErrTableNotFound = errors.New("table tidak ditemukan")
 
+// Metadata kolom tabel PostgreSQL dan SQLite.
 type Column struct {
 	Name      string  `json:"name"`
 	Type      string  `json:"type"`
@@ -21,6 +22,7 @@ type Column struct {
 	Generated string  `json:"generated,omitempty"`
 }
 
+// Metadata constraint tabel (PK, FK, UNIQUE, CHECK).
 type Constraint struct {
 	Name       string   `json:"name"`
 	Kind       string   `json:"kind"`
@@ -28,6 +30,7 @@ type Constraint struct {
 	Columns    []string `json:"columns"`
 }
 
+// Metadata index pada tabel.
 type Index struct {
 	Name       string   `json:"name"`
 	Definition string   `json:"definition"`
@@ -38,6 +41,7 @@ type Index struct {
 	Predicate  string   `json:"predicate,omitempty"`
 }
 
+// Detail kolom, constraint, dan index satu tabel.
 type Table struct {
 	Schema      string       `json:"schema"`
 	Name        string       `json:"name"`
@@ -46,18 +50,22 @@ type Table struct {
 	Constraints []Constraint `json:"constraints"`
 	Indexes     []Index      `json:"indexes"`
 }
+
+// Hasil pembacaan skema database target.
 type Snapshot struct {
 	Driver      string   `json:"driver"`
 	SchemaNames []string `json:"schemas"`
 	Tables      []Table  `json:"tables"`
 }
 
+// Hash SHA-256 snapshot untuk mendeteksi schema drift.
 func (s Snapshot) Fingerprint() string {
 	data, _ := json.Marshal(s)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
+// Cari tabel berdasarkan nama schema dan tabel.
 func (s Snapshot) Find(schema, name string) (Table, error) {
 	for _, table := range s.Tables {
 		if table.Schema == schema && table.Name == name {
@@ -67,9 +75,11 @@ func (s Snapshot) Find(schema, name string) (Table, error) {
 	return Table{}, ErrTableNotFound
 }
 
+// Daftar unik nama schema terurut, termasuk yang kosong.
 func (s Snapshot) Schemas() []string {
 	seen := map[string]bool{}
 	result := []string{}
+
 	for _, name := range s.SchemaNames {
 		if !seen[name] {
 			result = append(result, name)
@@ -82,6 +92,7 @@ func (s Snapshot) Schemas() []string {
 			seen[table.Schema] = true
 		}
 	}
+
 	sort.Strings(result)
 	return result
 }
@@ -90,125 +101,254 @@ type rowsQueryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-func (c *Connection) Snapshot(ctx context.Context) (Snapshot, error) {
-	return c.snapshot(ctx, c.DB)
+// Ambil snapshot schema dan tabel dari database target.
+func (conn *Connection) Snapshot(ctx context.Context) (Snapshot, error) {
+	return conn.snapshot(ctx, conn.DB)
 }
 
-func (c *Connection) snapshot(ctx context.Context, q rowsQueryer) (Snapshot, error) {
-	if c.Driver == "sqlite" {
-		return c.snapshotSQLite(ctx, q)
+// Baca snapshot memakai koneksi utama atau transaksi aktif.
+func (conn *Connection) snapshot(ctx context.Context, queryer rowsQueryer) (Snapshot, error) {
+	if conn.Driver == "sqlite" {
+		return conn.snapshotSQLite(ctx, queryer)
 	}
-	s := Snapshot{Driver: c.Driver, Tables: []Table{}}
-	schemaRows, err := q.QueryContext(ctx, `SELECT nspname FROM pg_namespace
-WHERE nspname NOT IN ('pg_catalog','information_schema') AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%' ORDER BY nspname`)
+
+	snapshot := Snapshot{Driver: conn.Driver, Tables: []Table{}}
+
+	// Abaikan schema bawaan sistem, toast, dan temporary.
+	const schemasQuery = `
+		SELECT nspname
+		FROM pg_namespace
+		WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+		  AND nspname NOT LIKE 'pg_toast%'
+		  AND nspname NOT LIKE 'pg_temp%'
+		ORDER BY nspname
+	`
+	schemaRows, err := queryer.QueryContext(ctx, schemasQuery)
 	if err != nil {
-		return s, err
+		return snapshot, err
 	}
 	for schemaRows.Next() {
 		var name string
-		if err = schemaRows.Scan(&name); err != nil {
+		err = schemaRows.Scan(&name)
+		if err != nil {
 			schemaRows.Close()
-			return s, err
+			return snapshot, err
 		}
-		s.SchemaNames = append(s.SchemaNames, name)
+		snapshot.SchemaNames = append(snapshot.SchemaNames, name)
 	}
 	err = schemaRows.Err()
 	schemaRows.Close()
 	if err != nil {
-		return s, err
+		return snapshot, err
 	}
-	rows, err := q.QueryContext(ctx, `SELECT n.nspname,t.relname FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
-WHERE t.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%' AND t.relname <> 'schema_migrations' ORDER BY n.nspname,t.relname`)
+
+	// Abaikan tabel ledger internal agar tidak ikut tampil di explorer maupun diff.
+	const tablesQuery = `
+		SELECT n.nspname, t.relname
+		FROM pg_class AS t
+		JOIN pg_namespace AS n
+			ON n.oid = t.relnamespace
+		WHERE t.relkind IN ('r', 'p')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		  AND n.nspname NOT LIKE 'pg_toast%'
+		  AND n.nspname NOT LIKE 'pg_temp%'
+		  AND t.relname <> 'schema_migrations'
+		ORDER BY n.nspname, t.relname
+	`
+	tableRows, err := queryer.QueryContext(ctx, tablesQuery)
 	if err != nil {
-		return s, err
+		return snapshot, err
 	}
-	for rows.Next() {
-		var t Table
-		if err = rows.Scan(&t.Schema, &t.Name); err != nil {
-			rows.Close()
-			return s, err
+	for tableRows.Next() {
+		var table Table
+		err = tableRows.Scan(&table.Schema, &table.Name)
+		if err != nil {
+			tableRows.Close()
+			return snapshot, err
 		}
-		s.Tables = append(s.Tables, t)
+		snapshot.Tables = append(snapshot.Tables, table)
 	}
-	err = rows.Err()
-	rows.Close()
+	err = tableRows.Err()
+	tableRows.Close()
 	if err != nil {
-		return s, err
+		return snapshot, err
 	}
-	for i := range s.Tables {
-		if err = c.fillPostgres(ctx, q, &s.Tables[i]); err != nil {
-			return s, err
+
+	for i := range snapshot.Tables {
+		err = conn.fillPostgres(ctx, queryer, &snapshot.Tables[i])
+		if err != nil {
+			return snapshot, err
 		}
 	}
-	return s, nil
+
+	return snapshot, nil
 }
 
-func (c *Connection) fillPostgres(ctx context.Context, q rowsQueryer, t *Table) error {
-	t.Columns = []Column{}
-	t.Constraints = []Constraint{}
-	t.Indexes = []Index{}
-	rows, err := q.QueryContext(ctx, `SELECT a.attname,format_type(a.atttypid,a.atttypmod),NOT a.attnotnull,pg_get_expr(d.adbin,d.adrelid),a.attidentity::text,a.attgenerated::text
-FROM pg_attribute a JOIN pg_class r ON r.oid=a.attrelid JOIN pg_namespace n ON n.oid=r.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid=r.oid AND d.adnum=a.attnum
-WHERE n.nspname=$1 AND r.relname=$2 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`, t.Schema, t.Name)
+// Isi kolom, constraint, dan index untuk satu tabel PostgreSQL.
+func (conn *Connection) fillPostgres(ctx context.Context, queryer rowsQueryer, table *Table) error {
+	table.Columns = []Column{}
+	table.Constraints = []Constraint{}
+	table.Indexes = []Index{}
+
+	err := conn.loadPostgresColumns(ctx, queryer, table)
 	if err != nil {
 		return err
 	}
+	err = conn.loadPostgresConstraints(ctx, queryer, table)
+	if err != nil {
+		return err
+	}
+	return conn.loadPostgresIndexes(ctx, queryer, table)
+}
+
+// Muat daftar kolom tabel PostgreSQL.
+func (conn *Connection) loadPostgresColumns(ctx context.Context, queryer rowsQueryer, table *Table) error {
+	const query = `
+		SELECT
+			a.attname,
+			format_type(a.atttypid, a.atttypmod),
+			NOT a.attnotnull,
+			pg_get_expr(d.adbin, d.adrelid),
+			a.attidentity::text,
+			a.attgenerated::text
+		FROM pg_attribute AS a
+		JOIN pg_class AS r
+			ON r.oid = a.attrelid
+		JOIN pg_namespace AS n
+			ON n.oid = r.relnamespace
+		LEFT JOIN pg_attrdef AS d
+			ON d.adrelid = r.oid
+			AND d.adnum = a.attnum
+		WHERE n.nspname = $1
+		  AND r.relname = $2
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped
+		ORDER BY a.attnum
+	`
+
+	rows, err := queryer.QueryContext(ctx, query, table.Schema, table.Name)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
 	for rows.Next() {
 		var col Column
-		if err = rows.Scan(&col.Name, &col.Type, &col.Nullable, &col.Default, &col.Identity, &col.Generated); err != nil {
-			rows.Close()
+		err = rows.Scan(&col.Name, &col.Type, &col.Nullable, &col.Default, &col.Identity, &col.Generated)
+		if err != nil {
 			return err
 		}
-		t.Columns = append(t.Columns, col)
+		table.Columns = append(table.Columns, col)
 	}
-	err = rows.Err()
-	rows.Close()
+
+	return rows.Err()
+}
+
+// Muat constraint tabel PostgreSQL beserta urutan kolomnya.
+func (conn *Connection) loadPostgresConstraints(ctx context.Context, queryer rowsQueryer, table *Table) error {
+	const query = `
+		SELECT
+			c.conname,
+			c.contype::text,
+			pg_get_constraintdef(c.oid),
+			COALESCE((
+				SELECT json_agg(a.attname ORDER BY k.ordinality)
+				FROM unnest(c.conkey) WITH ORDINALITY AS k(num, ordinality)
+				JOIN pg_attribute AS a
+					ON a.attrelid = c.conrelid
+					AND a.attnum = k.num
+			), '[]'::json)::text
+		FROM pg_constraint AS c
+		JOIN pg_class AS r
+			ON r.oid = c.conrelid
+		JOIN pg_namespace AS n
+			ON n.oid = r.relnamespace
+		WHERE n.nspname = $1
+		  AND r.relname = $2
+		ORDER BY c.conname
+	`
+
+	rows, err := queryer.QueryContext(ctx, query, table.Schema, table.Name)
 	if err != nil {
 		return err
 	}
-	rows, err = q.QueryContext(ctx, `SELECT c.conname,c.contype::text,pg_get_constraintdef(c.oid),COALESCE((SELECT json_agg(a.attname ORDER BY k.ordinality) FROM unnest(c.conkey) WITH ORDINALITY k(num,ordinality) JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.num),'[]'::json)::text
-FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace WHERE n.nspname=$1 AND r.relname=$2 ORDER BY c.conname`, t.Schema, t.Name)
-	if err != nil {
-		return err
-	}
+	defer rows.Close()
+
 	for rows.Next() {
-		var con Constraint
-		var cols string
-		if err = rows.Scan(&con.Name, &con.Kind, &con.Definition, &cols); err != nil {
-			rows.Close()
+		var constraint Constraint
+		var colsJSON string
+		err = rows.Scan(&constraint.Name, &constraint.Kind, &constraint.Definition, &colsJSON)
+		if err != nil {
 			return err
 		}
-		if err = json.Unmarshal([]byte(cols), &con.Columns); err != nil {
-			rows.Close()
+		err = json.Unmarshal([]byte(colsJSON), &constraint.Columns)
+		if err != nil {
 			return err
 		}
-		t.Constraints = append(t.Constraints, con)
+		table.Constraints = append(table.Constraints, constraint)
 	}
-	err = rows.Err()
-	rows.Close()
+
+	return rows.Err()
+}
+
+// Muat daftar index PostgreSQL beserta predikat dan kolomnya.
+func (conn *Connection) loadPostgresIndexes(ctx context.Context, queryer rowsQueryer, table *Table) error {
+	const query = `
+		SELECT
+			x.relname,
+			pg_get_indexdef(i.indexrelid),
+			i.indisunique,
+			EXISTS (
+				SELECT FROM pg_constraint AS c
+				WHERE c.conindid = i.indexrelid
+			),
+			am.amname,
+			COALESCE(pg_get_expr(i.indpred, i.indrelid), ''),
+			COALESCE((
+				SELECT json_agg(pg_get_indexdef(i.indexrelid, k, true) ORDER BY k)
+				FROM generate_series(1, i.indnkeyatts) AS k
+			), '[]'::json)::text
+		FROM pg_index AS i
+		JOIN pg_class AS r
+			ON r.oid = i.indrelid
+		JOIN pg_namespace AS n
+			ON n.oid = r.relnamespace
+		JOIN pg_class AS x
+			ON x.oid = i.indexrelid
+		JOIN pg_am AS am
+			ON am.oid = x.relam
+		WHERE n.nspname = $1
+		  AND r.relname = $2
+		ORDER BY x.relname
+	`
+
+	rows, err := queryer.QueryContext(ctx, query, table.Schema, table.Name)
 	if err != nil {
 		return err
 	}
-	rows, err = q.QueryContext(ctx, `SELECT x.relname,pg_get_indexdef(i.indexrelid),i.indisunique,EXISTS(SELECT FROM pg_constraint c WHERE c.conindid=i.indexrelid),am.amname,COALESCE(pg_get_expr(i.indpred,i.indrelid),''),
-COALESCE((SELECT json_agg(pg_get_indexdef(i.indexrelid,k,true) ORDER BY k) FROM generate_series(1,i.indnkeyatts) k),'[]'::json)::text
-FROM pg_index i JOIN pg_class r ON r.oid=i.indrelid JOIN pg_namespace n ON n.oid=r.relnamespace JOIN pg_class x ON x.oid=i.indexrelid JOIN pg_am am ON am.oid=x.relam WHERE n.nspname=$1 AND r.relname=$2 ORDER BY x.relname`, t.Schema, t.Name)
-	if err != nil {
-		return err
-	}
+	defer rows.Close()
+
 	for rows.Next() {
 		var index Index
-		var cols string
-		if err = rows.Scan(&index.Name, &index.Definition, &index.Unique, &index.Constraint, &index.Method, &index.Predicate, &cols); err != nil {
-			rows.Close()
+		var colsJSON string
+		err = rows.Scan(
+			&index.Name,
+			&index.Definition,
+			&index.Unique,
+			&index.Constraint,
+			&index.Method,
+			&index.Predicate,
+			&colsJSON,
+		)
+		if err != nil {
 			return err
 		}
-		if err = json.Unmarshal([]byte(cols), &index.Columns); err != nil {
-			rows.Close()
+		err = json.Unmarshal([]byte(colsJSON), &index.Columns)
+		if err != nil {
 			return err
 		}
-		t.Indexes = append(t.Indexes, index)
+		table.Indexes = append(table.Indexes, index)
 	}
-	err = rows.Err()
-	rows.Close()
-	return err
+
+	return rows.Err()
 }

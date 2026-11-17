@@ -2,6 +2,7 @@ package core
 
 import "time"
 
+// Status eksekusi migration.
 type AttemptStatus string
 
 const (
@@ -11,6 +12,7 @@ const (
 	AttemptUnknown AttemptStatus = "UNKNOWN"
 )
 
+// Draft SQL migration yang masih bisa diedit sebelum dijalankan.
 type Draft struct {
 	ID          int64     `json:"id"`
 	TargetID    int64     `json:"target_id"`
@@ -24,6 +26,7 @@ type Draft struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// Catatan eksekusi satu revisi draft yang sudah dikunci.
 type Attempt struct {
 	ID          string        `json:"id"`
 	TargetID    int64         `json:"target_id"`

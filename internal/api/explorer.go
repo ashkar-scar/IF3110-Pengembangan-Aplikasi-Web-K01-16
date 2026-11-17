@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 var ErrTargetNotFound = errors.New("database tidak ditemukan")
 
+// Target database beserta izin akses efektif user.
 type Target struct {
 	ID         int64           `json:"id"`
 	Name       string          `json:"name"`
@@ -38,10 +40,12 @@ func (a *API) UseTargets(source TargetSource, dataDir string) {
 	a.dataDir = dataDir
 }
 
+// Daftarkan route API daftar database, uji koneksi, dan explorer.
 func (a *API) explorerRoutes(mux *http.ServeMux) {
 	if a.targets == nil {
 		return
 	}
+
 	mux.HandleFunc("GET /api/databases", a.signedIn(a.databases))
 	mux.HandleFunc("POST /api/admin/databases/{id}/test", a.signedIn(a.testTarget))
 	for _, view := range []string{"schema", "schemas", "tables", "table", "rows"} {
@@ -57,6 +61,7 @@ func (a *API) signedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Session tidak ditemukan")
 			return
 		}
+
 		result, err := a.authService.Authenticate(r.Context(), cookie.Value)
 		if errors.Is(err, auth.ErrInvalidSession) {
 			a.clearSessionCookie(w)
@@ -68,6 +73,7 @@ func (a *API) signedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan pada server")
 			return
 		}
+
 		if result.NewSessionToken != "" {
 			a.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
 		}
@@ -75,12 +81,14 @@ func (a *API) signedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 	}
 }
 
+// Pastikan user berhak mengakses database target sesuai permission yang diminta.
 func (a *API) allowedTarget(w http.ResponseWriter, r *http.Request, user core.User, required core.Permission) (Target, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Database tidak ditemukan")
 		return Target{}, false
 	}
+
 	target, err := a.targets.Target(r.Context(), user.ID, id)
 	if errors.Is(err, ErrTargetNotFound) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Database tidak ditemukan")
@@ -91,6 +99,7 @@ func (a *API) allowedTarget(w http.ResponseWriter, r *http.Request, user core.Us
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan pada server")
 		return Target{}, false
 	}
+
 	if !target.Permission.Can(required) {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", "Anda tidak memiliki akses ke database ini")
 		return Target{}, false
@@ -98,6 +107,7 @@ func (a *API) allowedTarget(w http.ResponseWriter, r *http.Request, user core.Us
 	return target, true
 }
 
+// Buka koneksi target sesuai driver-nya.
 func (a *API) open(ctx context.Context, target Target) (*targetdb.Connection, error) {
 	switch target.Driver {
 	case "postgres":
@@ -108,11 +118,13 @@ func (a *API) open(ctx context.Context, target Target) (*targetdb.Connection, er
 	return nil, errors.New("driver tidak dikenal")
 }
 
+// Log error koneksi lalu balas 503 yang aman ke klien.
 func targetError(w http.ResponseWriter, err error) {
 	log.Printf("Database target tidak dapat diakses: %v", err)
 	writeError(w, http.StatusServiceUnavailable, "TARGET_UNAVAILABLE", "Database target tidak dapat diakses; periksa koneksi dan konfigurasi")
 }
 
+// Kirim daftar database target yang boleh diakses user.
 func (a *API) databases(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	targets, err := a.targets.Targets(r.Context(), session.User.ID)
 	if err != nil {
@@ -126,6 +138,7 @@ func (a *API) databases(w http.ResponseWriter, r *http.Request, session auth.Aut
 	writeJSON(w, http.StatusOK, targets)
 }
 
+// Uji koneksi database target (khusus admin platform).
 func (a *API) testTarget(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	if !a.validOrigin(r) {
 		writeError(w, http.StatusForbidden, "INVALID_CSRF", "Origin request tidak valid")
@@ -140,73 +153,106 @@ func (a *API) testTarget(w http.ResponseWriter, r *http.Request, session auth.Au
 		writeError(w, http.StatusForbidden, "INVALID_CSRF", "CSRF token tidak valid")
 		return
 	}
+
 	target, ok := a.allowedTarget(w, r, session.User, core.PermissionNone)
 	if !ok {
 		return
 	}
+
 	conn, err := a.open(r.Context(), target)
 	if err != nil {
 		targetError(w, err)
 		return
 	}
 	conn.Close()
+
 	writeJSON(w, http.StatusOK, map[string]bool{"connected": true})
 }
 
+// Layani endpoint metadata skema dan cuplikan isi tabel.
 func (a *API) explore(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	target, ok := a.allowedTarget(w, r, session.User, core.PermissionView)
 	if !ok {
 		return
 	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
+
 	conn, err := a.open(ctx, target)
 	if err != nil {
 		targetError(w, err)
 		return
 	}
 	defer conn.Close()
+
 	query := r.URL.Query()
-	schema, name := query.Get("schema"), query.Get("table")
-	if schema == "" {
-		schema = "public"
-		if target.Driver == "sqlite" {
-			schema = "main"
-		}
-	}
+	schema := defaultTargetSchema(target.Driver, query.Get("schema"))
+	tableName := query.Get("table")
 	view := path.Base(r.URL.Path)
+
 	if view == "rows" {
-		limit, offset := 50, 0
-		if value := query.Get("limit"); value != "" {
-			if limit, err = strconv.Atoi(value); err != nil {
-				writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Limit tidak valid")
-				return
-			}
-		}
-		if value := query.Get("offset"); value != "" {
-			if offset, err = strconv.Atoi(value); err != nil {
-				writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Offset tidak valid")
-				return
-			}
-		}
-		page, err := conn.Rows(ctx, schema, name, limit, offset)
-		switch {
-		case errors.Is(err, targetdb.ErrPagination):
-			writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Limit harus 1-200 dan offset 0-1000000")
-		case errors.Is(err, targetdb.ErrTableNotFound):
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "Tabel tidak ditemukan")
-		case err != nil:
-			targetError(w, err)
-		default:
-			writeJSON(w, http.StatusOK, page)
-		}
+		a.exploreRows(ctx, w, conn, query, schema, tableName)
 		return
 	}
+
+	a.exploreMetadata(ctx, w, conn, view, schema, tableName)
+}
+
+// Pilih nama schema bawaan sesuai driver bila kosong.
+func defaultTargetSchema(driver, requested string) string {
+	if requested != "" {
+		return requested
+	}
+	if driver == "sqlite" {
+		return "main"
+	}
+	return "public"
+}
+
+// Ambil satu halaman baris tabel beserta validasi pagination.
+func (a *API) exploreRows(ctx context.Context, w http.ResponseWriter, conn *targetdb.Connection, query url.Values, schema, tableName string) {
+	limit := 50
+	if rawLimit := query.Get("limit"); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Limit tidak valid")
+			return
+		}
+		limit = parsed
+	}
+
+	offset := 0
+	if rawOffset := query.Get("offset"); rawOffset != "" {
+		parsed, err := strconv.Atoi(rawOffset)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Offset tidak valid")
+			return
+		}
+		offset = parsed
+	}
+
+	page, err := conn.Rows(ctx, schema, tableName, limit, offset)
+	switch {
+	case errors.Is(err, targetdb.ErrPagination):
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Limit harus 1-200 dan offset 0-1000000")
+	case errors.Is(err, targetdb.ErrTableNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Tabel tidak ditemukan")
+	case err != nil:
+		targetError(w, err)
+	default:
+		writeJSON(w, http.StatusOK, page)
+	}
+}
+
+// Kirim daftar schema, daftar tabel, detail tabel, atau snapshot penuh.
+func (a *API) exploreMetadata(ctx context.Context, w http.ResponseWriter, conn *targetdb.Connection, view, schema, tableName string) {
 	snapshot, err := conn.Snapshot(ctx)
 	if err != nil {
 		targetError(w, err)
 		return
 	}
+
 	switch view {
 	case "schemas":
 		writeJSON(w, http.StatusOK, snapshot.Schemas())
@@ -219,7 +265,7 @@ func (a *API) explore(w http.ResponseWriter, r *http.Request, session auth.Authe
 		}
 		writeJSON(w, http.StatusOK, tables)
 	case "table":
-		table, err := snapshot.Find(schema, name)
+		table, err := snapshot.Find(schema, tableName)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Tabel tidak ditemukan")
 			return
@@ -231,6 +277,10 @@ func (a *API) explore(w http.ResponseWriter, r *http.Request, session auth.Authe
 			targetError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"snapshot": snapshot, "fingerprint": snapshot.Fingerprint(), "version": version})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"snapshot":    snapshot,
+			"fingerprint": snapshot.Fingerprint(),
+			"version":     version,
+		})
 	}
 }

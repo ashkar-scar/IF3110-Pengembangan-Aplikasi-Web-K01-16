@@ -1,11 +1,12 @@
 package schemadiff
 
 import (
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 	"strings"
+
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 )
 
-// Rewrite qualifiers without changing string literals in CHECK expressions or indexes.
+// Ganti qualifier nama schema tanpa mengubah isi string literal.
 func rewriteSchema(sql, from, to string) string {
 	var result strings.Builder
 	for i := 0; i < len(sql); {
@@ -67,6 +68,7 @@ func rewriteSchema(sql, from, to string) string {
 	return result.String()
 }
 
+// Cek apakah byte termasuk karakter identifier SQL tak berkutip.
 func word(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '$'
 }

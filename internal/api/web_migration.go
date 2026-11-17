@@ -35,7 +35,10 @@ type migrationsPage struct {
 	HasMoreHistory bool
 }
 
+// Offset riwayat halaman sebelumnya.
 func (p migrationsPage) PrevHistoryOffset() int { return max(p.HistoryOffset-store.AttemptsPerPage, 0) }
+
+// Offset riwayat halaman berikutnya.
 func (p migrationsPage) NextHistoryOffset() int { return p.HistoryOffset + store.AttemptsPerPage }
 
 // TODO(faiz): panggil dari main.go bersama UseTargets setelah tabel migration dibuat di database platform.
@@ -43,7 +46,7 @@ func (a *API) UseMigrations(repository *store.MigrationRepository) {
 	a.migrations = repository
 }
 
-// GET /databases/{id}/migrations
+// Tampilkan halaman editor draft dan riwayat migration (GET /databases/{id}/migrations).
 func (a *API) migrationsPage(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	target, ok := a.pageTarget(w, r, session, core.PermissionView)
 	if !ok {
@@ -55,6 +58,7 @@ func (a *API) migrationsPage(w http.ResponseWriter, r *http.Request, session aut
 		a.showError(w, http.StatusBadRequest, session, "Offset riwayat tidak valid.")
 		return
 	}
+
 	page, err := a.newMigrationsPage(r.Context(), target, session, offset)
 	if err != nil {
 		log.Printf("Gagal membaca migration: %v", err)
@@ -80,6 +84,7 @@ func (a *API) migrationsPage(w http.ResponseWriter, r *http.Request, session aut
 	render(w, http.StatusOK, "migrations", page)
 }
 
+// Muat daftar draft dan satu halaman riwayat attempt.
 func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth.AuthenticationResult, offsets ...int) (migrationsPage, error) {
 	page := migrationsPage{
 		base:    newBase("Migration "+target.Name, session),
@@ -89,7 +94,8 @@ func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth
 
 	var err error
 	if page.CanEdit {
-		if page.Drafts, err = a.migrations.ListDrafts(ctx, target.ID); err != nil {
+		page.Drafts, err = a.migrations.ListDrafts(ctx, target.ID)
+		if err != nil {
 			return page, err
 		}
 	}
@@ -102,10 +108,11 @@ func (a *API) newMigrationsPage(ctx context.Context, target Target, session auth
 	if page.HasMoreHistory {
 		page.History = page.History[:store.AttemptsPerPage]
 	}
+
 	return page, err
 }
 
-// POST /databases/{id}/migrations
+// Proses form migration: simpan draft, preview plan, atau eksekusi SQL.
 func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	target, ok := a.pageTarget(w, r, session, core.PermissionEdit)
 	if !ok {
@@ -130,10 +137,11 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 		Fingerprint: r.FormValue("fingerprint"),
 		CreatedBy:   session.User.ID,
 	}
+
 	action := r.FormValue("action")
 	if action != "save" && action != "run" && action != "plan" {
 		page.Error = "Aksi migration tidak valid."
-		render(w, 422, "migrations", page)
+		render(w, http.StatusUnprocessableEntity, "migrations", page)
 		return
 	}
 
@@ -178,7 +186,7 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 	redirectToMigrations(w, r, target, fmt.Sprintf("draft=%d&attempt=%s", draft.ID, attempt.ID))
 }
 
-// POST /databases/{id}/migrations/{attempt}/reconcile
+// Rekonsiliasi manual untuk attempt UNKNOWN atau RUNNING yang tertinggal.
 func (a *API) reconcileAttempt(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
 	target, ok := a.pageTarget(w, r, session, core.PermissionEdit)
 	if !ok {
@@ -191,7 +199,8 @@ func (a *API) reconcileAttempt(w http.ResponseWriter, r *http.Request, session a
 		return
 	}
 
-	if err := a.reconcile(r.Context(), target, attempt); err != nil {
+	err = a.reconcile(r.Context(), target, attempt)
+	if err != nil {
 		log.Printf("Rekonsiliasi %s gagal: %v", attempt.ID, err)
 		a.showError(w, http.StatusServiceUnavailable, session, "Database target tidak dapat diakses untuk rekonsiliasi. Coba lagi nanti.")
 		return
@@ -200,10 +209,12 @@ func (a *API) reconcileAttempt(w http.ResponseWriter, r *http.Request, session a
 	redirectToMigrations(w, r, target, "attempt="+attempt.ID)
 }
 
+// Redirect kembali ke halaman migration dengan query status.
 func redirectToMigrations(w http.ResponseWriter, r *http.Request, target Target, query string) {
 	http.Redirect(w, r, fmt.Sprintf("/databases/%d/migrations?%s", target.ID, query), http.StatusSeeOther)
 }
 
+// Simpan draft hanya jika isinya berubah dari revisi tersimpan.
 func (a *API) saveDraftIfChanged(ctx context.Context, target Target, form core.Draft) (core.Draft, error) {
 	if form.ID != 0 {
 		saved, err := a.migrations.GetDraft(ctx, target.ID, form.ID)
@@ -215,11 +226,11 @@ func (a *API) saveDraftIfChanged(ctx context.Context, target Target, form core.D
 	return a.saveDraft(ctx, target, form)
 }
 
+// Validasi lalu buat atau perbarui draft dengan versi target terbaru.
 func (a *API) saveDraft(ctx context.Context, target Target, draft core.Draft) (core.Draft, error) {
 	if len(draft.Description) < 2 || len(draft.Description) > 200 {
 		return draft, errors.New("Deskripsi harus 2 sampai 200 karakter.")
 	}
-
 	if strings.TrimSpace(draft.SQL) == "" || len(draft.SQL) > 65536 {
 		return draft, errors.New("SQL tidak boleh kosong dan maksimal 64 KiB.")
 	}
@@ -231,7 +242,8 @@ func (a *API) saveDraft(ctx context.Context, target Target, draft core.Draft) (c
 	}
 	defer conn.Close()
 
-	if draft.BaseVersion, err = conn.Version(ctx); err != nil {
+	draft.BaseVersion, err = conn.Version(ctx)
+	if err != nil {
 		log.Printf("Gagal membaca versi database target: %v", err)
 		return draft, errors.New("Versi database target tidak dapat dibaca.")
 	}
@@ -252,8 +264,16 @@ func (a *API) saveDraft(ctx context.Context, target Target, draft core.Draft) (c
 	return draft, nil
 }
 
+// Catat attempt RUNNING secara idempoten lalu jalankan SQL ke target.
 func (a *API) runDraft(ctx context.Context, target Target, draft core.Draft, user core.User) (core.Attempt, error) {
-	attempt, fingerprint, created, err := a.migrations.BeginAttempt(ctx, target.ID, draft.ID, draft.Revision, newAttemptID(), user)
+	attempt, fingerprint, created, err := a.migrations.BeginAttempt(
+		ctx,
+		target.ID,
+		draft.ID,
+		draft.Revision,
+		newAttemptID(),
+		user,
+	)
 	if errors.Is(err, store.ErrDraftConflict) {
 		return attempt, errors.New("Revisi draft sudah berubah. Buka ulang draft.")
 	}
@@ -261,21 +281,23 @@ func (a *API) runDraft(ctx context.Context, target Target, draft core.Draft, use
 		log.Printf("Gagal mencatat attempt: %v", err)
 		return attempt, errors.New("Migration tidak dapat dimulai.")
 	}
+
+	// Submit ulang pada revisi sama mengembalikan attempt lama tanpa eksekusi ulang.
 	if !created {
 		return attempt, nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	execCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	conn, err := a.open(ctx, target)
+	conn, err := a.open(execCtx, target)
 	if err != nil {
 		log.Printf("Database target tidak dapat diakses: %v", err)
 		return a.finish(attempt.ID, core.AttemptFailed, nil, "Database target tidak dapat diakses")
 	}
 	defer conn.Close()
 
-	version, err := conn.Execute(ctx, targetdb.Execution{
+	version, err := conn.Execute(execCtx, targetdb.Execution{
 		ID:          attempt.ID,
 		SQL:         attempt.SQL,
 		ActorID:     attempt.ActorID,
@@ -296,9 +318,11 @@ func (a *API) runDraft(ctx context.Context, target Target, draft core.Draft, use
 	}
 }
 
+// Simpan status akhir attempt dengan context baru agar tahan pembatalan request.
 func (a *API) finish(id string, status core.AttemptStatus, version *int64, message string) (core.Attempt, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	attempt, err := a.migrations.FinishAttempt(ctx, id, status, version, message)
 	if err != nil {
 		log.Printf("Gagal menyimpan hasil attempt %s: %v", id, err)
@@ -315,6 +339,7 @@ func (a *API) reconcile(ctx context.Context, target Target, attempt core.Attempt
 	if attempt.Status == core.AttemptRunning && time.Since(attempt.StartedAt) < reconcileGrace {
 		return nil
 	}
+
 	conn, err := a.open(ctx, target)
 	if err != nil {
 		return err
@@ -325,6 +350,7 @@ func (a *API) reconcile(ctx context.Context, target Target, attempt core.Attempt
 	if err != nil {
 		return err
 	}
+
 	if found {
 		_, err = a.finish(attempt.ID, core.AttemptSuccess, &version, "")
 	} else {
@@ -334,6 +360,7 @@ func (a *API) reconcile(ctx context.Context, target Target, attempt core.Attempt
 	return err
 }
 
+// Buat ID acak 128-bit hex untuk setiap attempt.
 func newAttemptID() string {
 	bytes := make([]byte, 16)
 	rand.Read(bytes)

@@ -12,6 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// Konfigurasi koneksi ke database target (tanpa password).
 type Config struct {
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
@@ -20,63 +21,94 @@ type Config struct {
 	SSLMode  string `json:"sslmode"`
 }
 
+// Pool koneksi ke database target PostgreSQL atau SQLite.
 type Connection struct {
 	DB     *sql.DB
 	Driver string
 }
 
-func OpenPostgres(ctx context.Context, c Config, password string) (*Connection, error) {
-	u := url.URL{Scheme: "postgres", User: url.UserPassword(c.Username, password), Host: net.JoinHostPort(c.Host, strconv.Itoa(c.Port)), Path: "/" + c.Database}
-	q := u.Query()
-	q.Set("sslmode", c.SSLMode)
-	q.Set("connect_timeout", "5")
-	u.RawQuery = q.Encode()
-	db, err := sql.Open("pgx", u.String())
+// Buka pool koneksi PostgreSQL target lalu cek konektivitasnya.
+func OpenPostgres(ctx context.Context, config Config, password string) (*Connection, error) {
+	connURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(config.Username, password),
+		Host:   net.JoinHostPort(config.Host, strconv.Itoa(config.Port)),
+		Path:   "/" + config.Database,
+	}
+
+	query := connURL.Query()
+	query.Set("sslmode", config.SSLMode)
+	query.Set("connect_timeout", "5")
+	connURL.RawQuery = query.Encode()
+
+	db, err := sql.Open("pgx", connURL.String())
 	if err != nil {
 		return nil, err
 	}
+
+	// Batasi pool per target supaya koneksi ke banyak database tidak cepat habis.
 	db.SetMaxOpenConns(3)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(5 * time.Minute)
-	ping, cancel := context.WithTimeout(ctx, 5*time.Second)
+
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err = db.PingContext(ping); err != nil {
+
+	err = db.PingContext(pingCtx)
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
+
 	return &Connection{DB: db, Driver: "postgres"}, nil
 }
 
-func Quote(value string) string    { return `"` + strings.ReplaceAll(value, `"`, `""`) + `"` }
-func (c *Connection) Close() error { return c.DB.Close() }
+// Kutip identifier SQL agar aman dari injeksi.
+func Quote(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+
+// Tutup pool koneksi target.
+func (conn *Connection) Close() error {
+	return conn.DB.Close()
+}
 
 type queryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func (c *Connection) ledger() string {
-	if c.Driver == "sqlite" {
+// Nama tabel ledger sesuai DBMS target.
+func (conn *Connection) ledger() string {
+	if conn.Driver == "sqlite" {
 		return "main.schema_migrations"
 	}
 	return "public.schema_migrations"
 }
 
-func (c *Connection) hasLedger(ctx context.Context, q queryer) (bool, error) {
+// Cek apakah tabel ledger schema_migrations sudah ada.
+func (conn *Connection) hasLedger(ctx context.Context, q queryer) (bool, error) {
 	query := "SELECT to_regclass('public.schema_migrations') IS NOT NULL"
-	if c.Driver == "sqlite" {
-		query = "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='schema_migrations')"
+	if conn.Driver == "sqlite" {
+		query = "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'schema_migrations')"
 	}
+
 	var exists bool
 	err := q.QueryRowContext(ctx, query).Scan(&exists)
 	return exists, err
 }
 
-func (c *Connection) Version(ctx context.Context) (int64, error) {
-	exists, err := c.hasLedger(ctx, c.DB)
-	if err != nil || !exists {
+// Ambil versi migration terakhir, atau 0 jika ledger belum ada.
+func (conn *Connection) Version(ctx context.Context) (int64, error) {
+	exists, err := conn.hasLedger(ctx, conn.DB)
+	if err != nil {
 		return 0, err
 	}
+	if !exists {
+		return 0, nil
+	}
+
+	query := "SELECT COALESCE(MAX(version), 0) FROM " + conn.ledger()
 	var version int64
-	err = c.DB.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0) FROM "+c.ledger()).Scan(&version)
+	err = conn.DB.QueryRowContext(ctx, query).Scan(&version)
 	return version, err
 }
