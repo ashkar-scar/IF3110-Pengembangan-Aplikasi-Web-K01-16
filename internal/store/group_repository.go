@@ -2,10 +2,15 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// Error message
+var ErrLeaderNotMember = errors.New("Leader harus merupakan anggota aktif dari group")
 
 // Penyimpanan data group di database platform
 type GroupRepository struct {
@@ -34,12 +39,19 @@ func (repository *GroupRepository) Create(ctx context.Context, group core.Group)
 	return group, nil
 }
 
-// Mengambil semua group dari database platform
+// Mengambil semua group beserta informasi leader
 func (repository *GroupRepository) FindAll(ctx context.Context) ([]core.Group, error) {
 	const query = `
-		SELECT id, name, created_at
-		FROM groups
-		ORDER BY id
+		SELECT
+			g.id,
+			g.name,
+			g.leader_id,
+			COALESCE(u.username, ''),
+			g.created_at
+		FROM groups AS g
+		LEFT JOIN users AS u
+			ON u.id = g.leader_id
+		ORDER BY g.id
 	`
 
 	rows, err := repository.database.Query(ctx, query)
@@ -50,10 +62,12 @@ func (repository *GroupRepository) FindAll(ctx context.Context) ([]core.Group, e
 	defer rows.Close()
 
 	groups := []core.Group{}
+
 	for rows.Next() {
 		var group core.Group
+		err := rows.Scan(&group.ID, &group.Name, &group.LeaderID, &group.LeaderUsername, &group.CreatedAt)
 
-		if err := rows.Scan(&group.ID, &group.Name, &group.CreatedAt); err != nil {
+		if err != nil {
 			return nil, fmt.Errorf("Gagal membaca data group: %w", err)
 		}
 
@@ -187,6 +201,18 @@ func (repository *GroupRepository) RemoveMember(ctx context.Context, groupID, us
 		return ErrNotFound
 	}
 
+	// Jika anggota yang dihapus adalah leader, kosongkan posisi leader group
+	const clearLeaderQuery = `
+		UPDATE groups
+		SET leader_id = NULL
+		WHERE id = $1
+		AND leader_id = $2
+	`
+
+	if _, err = tx.Exec(ctx, clearLeaderQuery, groupID, userID); err != nil {
+		return fmt.Errorf("Gagal mengosongkan leader group: %w", err)
+	}
+
 	const revokeSessionQuery = `
 		UPDATE sessions
 		SET revoked_at = NOW()
@@ -199,4 +225,79 @@ func (repository *GroupRepository) RemoveMember(ctx context.Context, groupID, us
 	}
 
 	return tx.Commit(ctx)
+}
+
+// SetLeader menetapkan anggota aktif sebagai leader group.
+func (repository *GroupRepository) SetLeader(ctx context.Context, groupID int64, leaderID int64) (core.Group, error) {
+	tx, err := repository.database.Begin(ctx)
+	if err != nil {
+		return core.Group{}, fmt.Errorf("Gagal memulai transaksi leader: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	// Memastikan group tersedia dan menguncinya selama perubahan
+	if err := lockGroup(ctx, tx, groupID); err != nil {
+		return core.Group{}, err
+	}
+
+	// Leader harus menjadi anggota group dan masih aktif
+	const memberQuery = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM group_members AS gm
+			JOIN users AS u
+				ON u.id = gm.user_id
+			WHERE gm.group_id = $1
+				AND gm.user_id = $2
+			  	AND u.is_active = TRUE
+		)
+	`
+
+	var validMember bool
+	if err := tx.QueryRow(ctx, memberQuery, groupID, leaderID).Scan(&validMember); err != nil {
+		return core.Group{}, fmt.Errorf(
+			"Gagal memeriksa calon leader: %w",
+			err,
+		)
+	}
+
+	if !validMember {
+		return core.Group{}, ErrLeaderNotMember
+	}
+
+	const updateQuery = `
+		UPDATE groups
+		SET leader_id = $2
+		WHERE id = $1
+	`
+
+	if _, err := tx.Exec(ctx, updateQuery, groupID, leaderID); err != nil {
+		return core.Group{}, fmt.Errorf("Gagal menetapkan leader: %w", err)
+	}
+
+	const findQuery = `
+		SELECT
+			g.id,
+			g.name,
+			g.leader_id,
+			COALESCE(u.username, ''),
+			g.created_at
+		FROM groups AS g
+		LEFT JOIN users AS u
+			ON u.id = g.leader_id
+		WHERE g.id = $1
+	`
+
+	var group core.Group
+	err = tx.QueryRow(ctx, findQuery, groupID).Scan(&group.ID, &group.Name, &group.LeaderID, &group.LeaderUsername, &group.CreatedAt)
+	if err != nil {
+		return core.Group{}, fmt.Errorf("Gagal membaca group setelah menetapkan leader: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return core.Group{}, fmt.Errorf("Gagal menyimpan leader: %w", err)
+	}
+
+	return group, nil
 }
