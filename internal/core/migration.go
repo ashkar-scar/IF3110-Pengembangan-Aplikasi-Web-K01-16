@@ -90,26 +90,29 @@ type MigrationApproval struct {
 
 // MigrationRequest adalah snapshot immutable draft yang menunggu approval atau eksekusi.
 type MigrationRequest struct {
-	ID                 int64               `json:"id"`
-	TargetID           int64               `json:"target_id"`
-	DraftID            int64               `json:"draft_id"`
-	DraftRevision      int                 `json:"draft_revision"`
-	Action             MigrationAction     `json:"action_type"`
-	TargetExecutionID  *string             `json:"target_execution_id"`
-	SQLSnapshotUp      string              `json:"sql_up"`
-	SQLSnapshotDown    string              `json:"sql_down"`
-	IsIrreversible     bool                `json:"is_irreversible"`
-	IrreversibleReason string              `json:"irreversible_reason"`
-	ExecutionMode      ExecutionMode       `json:"execution_mode"`
-	BatchColumn        string              `json:"batch_column"`
-	BatchSize          int                 `json:"batch_size"`
-	BaseVersion        int64               `json:"base_version"`
-	Fingerprint        string              `json:"fingerprint"`
-	RequestedBy        int64               `json:"requested_by"`
-	Status             RequestStatus       `json:"status"`
-	CreatedAt          time.Time           `json:"created_at"`
-	UpdatedAt          time.Time           `json:"updated_at"`
-	Approvals          []MigrationApproval `json:"approvals"`
+	ID                    int64               `json:"id"`
+	TargetID              int64               `json:"target_id"`
+	DraftID               int64               `json:"draft_id"`
+	DraftRevision         int                 `json:"draft_revision"`
+	Description           string              `json:"description"`
+	Action                MigrationAction     `json:"action_type"`
+	TargetExecutionID     *string             `json:"target_execution_id"`
+	SQLSnapshotUp         string              `json:"sql_up"`
+	SQLSnapshotDown       string              `json:"sql_down"`
+	IsIrreversible        bool                `json:"is_irreversible"`
+	IrreversibleReason    string              `json:"irreversible_reason"`
+	ExecutionMode         ExecutionMode       `json:"execution_mode"`
+	BatchColumn           string              `json:"batch_column"`
+	BatchSize             int                 `json:"batch_size"`
+	BaseVersion           int64               `json:"base_version"`
+	Fingerprint           string              `json:"fingerprint"`
+	RequestedBy           int64               `json:"requested_by"`
+	RequestedByName       string              `json:"requested_by_name"`
+	Status                RequestStatus       `json:"status"`
+	CanCurrentUserApprove bool                `json:"can_current_user_approve"`
+	CreatedAt             time.Time           `json:"created_at"`
+	UpdatedAt             time.Time           `json:"updated_at"`
+	Approvals             []MigrationApproval `json:"approvals"`
 }
 
 // Catatan eksekusi satu revisi draft yang sudah dikunci.
