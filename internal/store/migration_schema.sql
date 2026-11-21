@@ -33,6 +33,40 @@ UPDATE migration_drafts
 SET sql_up = sql_text
 WHERE sql_up = '' AND sql_text <> '';
 
+CREATE TABLE IF NOT EXISTS migration_requests (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    target_id BIGINT NOT NULL REFERENCES database_targets(id),
+    draft_id BIGINT NOT NULL REFERENCES migration_drafts(id),
+    draft_revision INTEGER NOT NULL,
+    action_type TEXT NOT NULL CHECK (action_type IN ('UP', 'ROLLBACK', 'FORWARD', 'CANCEL_BATCH')),
+    target_execution_id TEXT,
+    sql_snapshot_up TEXT NOT NULL,
+    sql_snapshot_down TEXT NOT NULL,
+    is_irreversible BOOLEAN NOT NULL,
+    irreversible_reason TEXT NOT NULL DEFAULT '',
+    execution_mode TEXT NOT NULL CHECK (execution_mode IN ('NORMAL', 'BATCH')),
+    batch_column TEXT NOT NULL DEFAULT '',
+    batch_size INTEGER NOT NULL DEFAULT 1000 CHECK (batch_size BETWEEN 1 AND 100000),
+    base_version BIGINT NOT NULL,
+    fingerprint TEXT NOT NULL DEFAULT '',
+    requested_by BIGINT NOT NULL REFERENCES users(id),
+    status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'ENQUEUED', 'COMPLETED', 'FAILED')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Menyimpan keputusan leader setiap group yang memiliki akses ke target.
+CREATE TABLE IF NOT EXISTS migration_approvals (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    request_id BIGINT NOT NULL REFERENCES migration_requests(id) ON DELETE CASCADE,
+    group_id BIGINT NOT NULL REFERENCES groups(id),
+    leader_id BIGINT NOT NULL REFERENCES users(id),
+    decision TEXT NOT NULL DEFAULT 'PENDING' CHECK (decision IN ('PENDING', 'APPROVED', 'REJECTED')),
+    note TEXT NOT NULL DEFAULT '',
+    decided_at TIMESTAMPTZ,
+    UNIQUE (request_id, group_id)
+);
+
 CREATE TABLE IF NOT EXISTS migration_attempts (
     id TEXT PRIMARY KEY,
     target_id BIGINT NOT NULL,
@@ -52,4 +86,6 @@ CREATE TABLE IF NOT EXISTS migration_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS migration_drafts_target_idx ON migration_drafts (target_id, updated_at);
+CREATE INDEX IF NOT EXISTS migration_requests_target_idx ON migration_requests (target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS migration_approvals_request_idx ON migration_approvals (request_id, group_id);
 CREATE INDEX IF NOT EXISTS migration_attempts_target_idx ON migration_attempts (target_id, started_at);
