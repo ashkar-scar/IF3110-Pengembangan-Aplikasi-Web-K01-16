@@ -12,12 +12,30 @@ const (
 	AttemptUnknown AttemptStatus = "UNKNOWN"
 )
 
+// ExecutionMode menentukan apakah worker mengeksekusi SQL sekaligus atau per batch.
+type ExecutionMode string
+
+const (
+	ExecutionNormal ExecutionMode = "NORMAL"
+	ExecutionBatch  ExecutionMode = "BATCH"
+)
+
 // Draft SQL migration yang masih bisa diedit sebelum dijalankan.
 type Draft struct {
-	ID          int64     `json:"id"`
-	TargetID    int64     `json:"target_id"`
-	Description string    `json:"description"`
-	SQL         string    `json:"sql"`
+	ID          int64  `json:"id"`
+	TargetID    int64  `json:"target_id"`
+	Description string `json:"description"`
+
+	SQL                string        `json:"-"`
+	SQLUp              string        `json:"sql_up"`
+	SQLDown            string        `json:"sql_down"`
+	IsIrreversible     bool          `json:"is_irreversible"`
+	IrreversibleReason string        `json:"irreversible_reason"`
+	ExecutionMode      ExecutionMode `json:"execution_mode"`
+	BatchColumn        string        `json:"batch_column"`
+	BatchSize          int           `json:"batch_size"`
+	IsLocked           bool          `json:"is_locked"`
+
 	CreatedBy   int64     `json:"created_by"`
 	Revision    int       `json:"revision"`
 	BaseVersion int64     `json:"base_version"`
