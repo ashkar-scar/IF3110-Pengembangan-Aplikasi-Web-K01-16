@@ -2,10 +2,10 @@ package api
 
 import (
 	"encoding/json"
-	"log"
-	"net/http"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
+	"log"
+	"net/http"
 )
 
 // API menampung seluruh dependency dan handler API
@@ -42,6 +42,7 @@ func (a *API) Router() http.Handler {
 	a.databaseRoutes(mux)
 	a.editRoutes(mux)
 	a.explorerRoutes(mux)
+	a.migrationDraftRoutes(mux)
 	a.webRoutes(mux)
 	return mux
 }
