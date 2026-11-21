@@ -31,6 +31,45 @@ func (a *API) migrationDraftRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/databases/{id}/drafts", a.RequireDatabasePermission(core.PermissionView, a.listMigrationDrafts))
 	mux.HandleFunc("POST /api/databases/{id}/drafts", a.RequireDatabasePermission(core.PermissionEdit, a.createMigrationDraft))
 	mux.HandleFunc("PUT /api/databases/{id}/drafts/{draftID}", a.RequireDatabasePermission(core.PermissionEdit, a.updateMigrationDraft))
+	mux.HandleFunc("POST /api/databases/{id}/drafts/{draftID}/submit-review", a.RequireDatabasePermission(core.PermissionEdit, a.submitMigrationDraftReview))
+}
+
+// submitMigrationDraftReview membuat request approval dan mengunci snapshot draft.
+func (a *API) submitMigrationDraftReview(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	target, ok := a.allowedTarget(w, r, session.User, core.PermissionEdit)
+	if !ok {
+		return
+	}
+	
+	draftID, ok := pathID(w, r, "draftID")
+	if !ok {
+		return
+	}
+
+	request, err := a.migrations.SubmitReview(r.Context(), target.ID, draftID, session.User.ID)
+	switch {
+	case errors.Is(err, store.ErrDraftNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Draft migration tidak ditemukan")
+
+	case errors.Is(err, store.ErrDraftImmutable), errors.Is(err, store.ErrDraftConflict):
+		writeError(w, http.StatusConflict, "IMMUTABLE", "Draft sudah diajukan atau dieksekusi")
+
+	case errors.Is(err, store.ErrDraftInvalid):
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Draft belum memenuhi syarat untuk diajukan")
+
+	case errors.Is(err, store.ErrNoGroupLeader):
+		writeError(w, http.StatusUnprocessableEntity, "NO_GROUP_LEADER", "Setiap group berizin wajib memiliki leader aktif")
+
+	case errors.Is(err, store.ErrNoApprovalGroup):
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Database belum memiliki group berizin")
+
+	case err != nil:
+		log.Printf("Gagal submit review migration: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Draft tidak dapat diajukan untuk review")
+
+	default:
+		writeJSON(w, http.StatusCreated, request)
+	}
 }
 
 // validateDraftRequest membersihkan input dan memastikan aturan draft
@@ -194,7 +233,7 @@ func (a *API) updateMigrationDraft(w http.ResponseWriter, r *http.Request, sessi
 	if !readJSON(w, r, &request) {
 		return
 	}
-	
+
 	if message, valid := validateDraftRequest(&request); !valid {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", message)
 		return
