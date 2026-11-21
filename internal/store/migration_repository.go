@@ -21,7 +21,7 @@ var (
 )
 
 const (
-	draftColumns   = "id, target_id, description, sql_text, created_by, revision, base_version, fingerprint, created_at, updated_at"
+	draftColumns   = "id, target_id, description, sql_up, sql_down, is_irreversible, irreversible_reason, execution_mode, batch_column, batch_size, is_locked, created_by, revision, base_version, fingerprint, created_at, updated_at"
 	attemptColumns = "id, target_id, draft_id, draft_revision, description, sql_text, actor_id, actor_name, base_version, version, status, safe_error, started_at, finished_at"
 )
 
@@ -42,7 +42,14 @@ func scanDraft(row pgx.Row) (core.Draft, error) {
 		&draft.ID,
 		&draft.TargetID,
 		&draft.Description,
-		&draft.SQL,
+		&draft.SQLUp,
+		&draft.SQLDown,
+		&draft.IsIrreversible,
+		&draft.IrreversibleReason,
+		&draft.ExecutionMode,
+		&draft.BatchColumn,
+		&draft.BatchSize,
+		&draft.IsLocked,
 		&draft.CreatedBy,
 		&draft.Revision,
 		&draft.BaseVersion,
@@ -50,11 +57,38 @@ func scanDraft(row pgx.Row) (core.Draft, error) {
 		&draft.CreatedAt,
 		&draft.UpdatedAt,
 	)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return draft, ErrDraftNotFound
 	}
 
+	if err == nil {
+		// Template SSR lama masih membaca Draft.SQL.
+		draft.SQL = draft.SQLUp
+	}
+
 	return draft, err
+}
+
+func normalizeDraft(draft core.Draft) core.Draft {
+	if draft.SQLUp == "" {
+		draft.SQLUp = draft.SQL
+	}
+
+	draft.SQL = draft.SQLUp
+	if draft.ExecutionMode == "" {
+		draft.ExecutionMode = core.ExecutionNormal
+	}
+
+	if draft.BatchSize == 0 {
+		draft.BatchSize = 1000
+	}
+
+	if draft.ExecutionMode == core.ExecutionNormal {
+		draft.BatchColumn = ""
+	}
+
+	return draft
 }
 
 // Petakan satu baris query ke core.Attempt.
@@ -120,18 +154,26 @@ func (repository *MigrationRepository) GetDraft(ctx context.Context, targetID, d
 	return scanDraft(repository.database.QueryRow(ctx, query, targetID, draftID))
 }
 
-// Simpan draft baru mulai dari revisi 1.
+// Simpan draft baru 
 func (repository *MigrationRepository) CreateDraft(ctx context.Context, draft core.Draft) (core.Draft, error) {
+	draft = normalizeDraft(draft)
 	query := `
 		INSERT INTO migration_drafts (
 			target_id,
 			description,
 			sql_text,
+			sql_up,
+			sql_down,
+			is_irreversible,
+			irreversible_reason,
+			execution_mode,
+			batch_column,
+			batch_size,
 			created_by,
 			base_version,
 			fingerprint
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING ` + draftColumns
 
 	return scanDraft(repository.database.QueryRow(
@@ -139,7 +181,14 @@ func (repository *MigrationRepository) CreateDraft(ctx context.Context, draft co
 		query,
 		draft.TargetID,
 		draft.Description,
-		draft.SQL,
+		draft.SQLUp,
+		draft.SQLUp,
+		draft.SQLDown,
+		draft.IsIrreversible,
+		draft.IrreversibleReason,
+		draft.ExecutionMode,
+		draft.BatchColumn,
+		draft.BatchSize,
 		draft.CreatedBy,
 		draft.BaseVersion,
 		draft.Fingerprint,
@@ -148,36 +197,53 @@ func (repository *MigrationRepository) CreateDraft(ctx context.Context, draft co
 
 // UpdateDraft hanya berhasil jika revisi masih sama dan draft belum pernah dijalankan dengan hasil final atau sedang berjalan
 func (repository *MigrationRepository) UpdateDraft(ctx context.Context, draft core.Draft) (core.Draft, error) {
+	draft = normalizeDraft(draft)
 	query := `
 		UPDATE migration_drafts AS d
 		SET
 			description = $1,
 			sql_text = $2,
-			base_version = $3,
-			fingerprint = $4,
+			sql_up = $2,
+			sql_down = $3,
+			is_irreversible = $4,
+			irreversible_reason = $5,
+			execution_mode = $6,
+			batch_column = $7,
+			batch_size = $8,
+			base_version = $9,
+			fingerprint = $10,
 			revision = revision + 1,
 			updated_at = now()
-		WHERE d.target_id = $5
-		  AND d.id = $6
-		  AND d.revision = $7
-		  AND NOT EXISTS (
+
+		WHERE d.target_id = $11
+		  	AND d.id = $12
+		  	AND d.revision = $13
+		  	AND d.is_locked = FALSE
+		  	AND NOT EXISTS (
 			SELECT FROM migration_attempts AS a
 			WHERE a.draft_id = d.id
-			  AND a.status IN ('SUCCESS', 'RUNNING', 'UNKNOWN')
-		  )
+			  	AND a.status IN ('SUCCESS', 'RUNNING', 'UNKNOWN')
+		  	)
 		RETURNING ` + draftColumns
 
 	updated, err := scanDraft(repository.database.QueryRow(
 		ctx,
 		query,
 		draft.Description,
-		draft.SQL,
+		draft.SQLUp,
+		draft.SQLDown,
+		draft.IsIrreversible,
+		draft.IrreversibleReason,
+		draft.ExecutionMode,
+		draft.BatchColumn,
+		draft.BatchSize,
 		draft.BaseVersion,
 		draft.Fingerprint,
 		draft.TargetID,
 		draft.ID,
 		draft.Revision,
 	))
+
 	if errors.Is(err, ErrDraftNotFound) {
 		return updated, ErrDraftConflict
 	}
@@ -215,6 +281,14 @@ func (repository *MigrationRepository) BeginAttempt(
 		return attempt, "", false, ErrDraftConflict
 	}
 
+	if _, err = transaction.Exec(ctx, `
+		UPDATE migration_drafts
+		SET is_locked = TRUE, updated_at = now()
+		WHERE id = $1
+	`, draft.ID); err != nil {
+		return attempt, "", false, fmt.Errorf("Gagal mengunci draft: %w", err)
+	}
+
 	const insertAttemptQuery = `
 		INSERT INTO migration_attempts (
 			id,
@@ -239,7 +313,7 @@ func (repository *MigrationRepository) BeginAttempt(
 		draft.ID,
 		draft.Revision,
 		draft.Description,
-		draft.SQL,
+		draft.SQLUp,
 		actor.ID,
 		actor.Username,
 		draft.BaseVersion,
