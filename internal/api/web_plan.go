@@ -20,10 +20,10 @@ type planView struct {
 }
 
 type planNode struct {
-	Title     string
-	Estimate  string
-	Condition string
-	Children  []planNode
+	Title     string     `json:"title"`
+	Estimate  string     `json:"estimate"`
+	Condition string     `json:"condition"`
+	Children  []planNode `json:"children"`
 }
 
 // Jalankan EXPLAIN untuk satu statement SQL tanpa mengeksekusinya.
