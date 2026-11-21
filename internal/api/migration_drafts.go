@@ -23,6 +23,10 @@ type draftRequest struct {
 	Fingerprint        string             `json:"fingerprint"`
 }
 
+type reviewDecisionRequest struct {
+	Note string `json:"note"`
+}
+
 // migrationDraftRoutes mendaftarkan endpoint untuk membaca, membuat, dan mengubah draft migration
 func (a *API) migrationDraftRoutes(mux *http.ServeMux) {
 	if a.migrations == nil || a.targets == nil {
@@ -32,6 +36,102 @@ func (a *API) migrationDraftRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/databases/{id}/drafts", a.RequireDatabasePermission(core.PermissionEdit, a.createMigrationDraft))
 	mux.HandleFunc("PUT /api/databases/{id}/drafts/{draftID}", a.RequireDatabasePermission(core.PermissionEdit, a.updateMigrationDraft))
 	mux.HandleFunc("POST /api/databases/{id}/drafts/{draftID}/submit-review", a.RequireDatabasePermission(core.PermissionEdit, a.submitMigrationDraftReview))
+	mux.HandleFunc("GET /api/databases/{id}/reviews", a.RequireDatabasePermission(core.PermissionView, a.listMigrationReviews))
+	mux.HandleFunc("POST /api/databases/{id}/reviews/{reqID}/approve", a.RequireDatabasePermission(core.PermissionView, a.approveMigrationReview))
+	mux.HandleFunc("POST /api/databases/{id}/reviews/{reqID}/reject", a.RequireDatabasePermission(core.PermissionView, a.rejectMigrationReview))
+}
+
+// listMigrationReviews mengirim request review dan approval group untuk satu database kepada forntend.
+func (a *API) listMigrationReviews(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	target, ok := a.allowedTarget(w, r, session.User, core.PermissionView)
+	if !ok {
+		return
+	}
+
+	reviews, err := a.migrations.ListReviews(r.Context(), target.ID, session.User.ID)
+	if err != nil {
+		log.Printf("Gagal membaca migration review: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Migration review tidak dapat dimuat")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, reviews)
+}
+
+// reviewDecisionError mengubah error keputusan review menjadi response HTTP.
+func reviewDecisionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, store.ErrReviewNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Migration review tidak ditemukan")
+
+	case errors.Is(err, store.ErrReviewFinal):
+		writeError(w, http.StatusConflict, "CONFLICT", "Migration review sudah memiliki keputusan final")
+
+	case errors.Is(err, store.ErrNotGroupLeader):
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "Anda bukan leader yang dapat memutuskan review ini")
+
+	default:
+		log.Printf("Gagal menyimpan keputusan migration review: %v", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Keputusan review tidak dapat disimpan")
+	}
+}
+
+// approveMigrationReview menyetujui review sebagai leader group pengguna saat ini.
+func (a *API) approveMigrationReview(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	target, ok := a.allowedTarget(w, r, session.User, core.PermissionView)
+	if !ok {
+		return
+	}
+
+	requestID, ok := pathID(w, r, "reqID")
+	if !ok {
+		return
+	}
+
+	var input reviewDecisionRequest
+	if !readJSON(w, r, &input) {
+		return
+	}
+
+	request, err := a.migrations.ApproveReview(r.Context(), target.ID, requestID, session.User.ID, input.Note)
+	if err != nil {
+		reviewDecisionError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, request)
+}
+
+// rejectMigrationReview menolak review sebagai leader dengan alasan yang wajib diisi.
+func (a *API) rejectMigrationReview(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	target, ok := a.allowedTarget(w, r, session.User, core.PermissionView)
+	if !ok {
+		return
+	}
+
+	requestID, ok := pathID(w, r, "reqID")
+	if !ok {
+		return
+	}
+
+	var input reviewDecisionRequest
+	if !readJSON(w, r, &input) {
+		return
+	}
+
+	input.Note = strings.TrimSpace(input.Note)
+	if input.Note == "" {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Alasan penolakan wajib diisi")
+		return
+	}
+
+	request, err := a.migrations.RejectReview(r.Context(), target.ID, requestID, session.User.ID, input.Note)
+	if err != nil {
+		reviewDecisionError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, request)
 }
 
 // submitMigrationDraftReview membuat request approval dan mengunci snapshot draft.
@@ -40,7 +140,7 @@ func (a *API) submitMigrationDraftReview(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	
+
 	draftID, ok := pathID(w, r, "draftID")
 	if !ok {
 		return
