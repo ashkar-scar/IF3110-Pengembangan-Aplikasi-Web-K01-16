@@ -230,7 +230,7 @@ func Plan(sql string) (Statement, error) {
 func checkTokens(tokens []string) error {
 	for _, token := range tokens {
 		switch token {
-		case "SCHEMA_MIGRATIONS",
+		case "SCHEMA_MIGRATIONS", "RUANGDB_INTERNAL",
 			"BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "RESET",
 			"PRAGMA", "ATTACH", "DETACH", "VACUUM",
 			"COPY", "CALL", "DO", "SET_CONFIG",
