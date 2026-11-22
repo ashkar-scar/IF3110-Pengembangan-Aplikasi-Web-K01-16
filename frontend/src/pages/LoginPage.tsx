@@ -4,13 +4,23 @@ import schoolBg from "../assets/anime-school-background.jpg";
 import { BrandMark } from "../components/BrandMark";
 import { StatePanel } from "../components/StatePanel";
 import { useAuth } from "../context/useAuth";
-import { ApiRequestError } from "../types/auth";
+import { ApiRequestError, type User } from "../types/auth";
+
+function resolveLandingPath(candidate: string | undefined, targetUser: User): string {
+    if (!candidate || candidate === "/login") {
+        return "/databases";
+    }
+    if (candidate.startsWith("/admin") && !targetUser.is_platform_admin) {
+        return "/databases";
+    }
+    return candidate;
+}
 
 export function LoginPage() {
     const { user, isLoading, login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const redirectTo = (location.state as { from?: string } | null)?.from ?? "/databases";
+    const rawFrom = (location.state as { from?: string } | null)?.from;
 
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -40,7 +50,7 @@ export function LoginPage() {
     }
 
     if (user) {
-        return <Navigate to={redirectTo} replace />;
+        return <Navigate to={resolveLandingPath(rawFrom, user)} replace />;
     }
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -49,8 +59,8 @@ export function LoginPage() {
         setIsSubmitting(true);
 
         try {
-            await login(username.trim(), password);
-            navigate(redirectTo, { replace: true });
+            const loggedUser = await login(username.trim(), password);
+            navigate(resolveLandingPath(rawFrom, loggedUser), { replace: true });
         } catch (err) {
             if (err instanceof ApiRequestError) {
                 setError(err.message);
