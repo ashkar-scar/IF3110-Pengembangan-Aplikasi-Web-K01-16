@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
 )
@@ -20,6 +21,7 @@ func NewPostgresPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, er
 	if err != nil {
 		return nil, fmt.Errorf("Konfigurasi PostgreSQL tidak valid: %w", err)
 	}
+	config.ConnConfig.Tracer = observability.SQLTracer{Database: "platform"}
 
 	// Buat pool koneksi berdasarkan konfigurasi
 	pool, err := pgxpool.NewWithConfig(ctx, config)
