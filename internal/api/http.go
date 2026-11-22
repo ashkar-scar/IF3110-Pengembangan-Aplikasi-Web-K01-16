@@ -2,10 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/queue"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"log"
 	"net/http"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
 
 // API menampung seluruh dependency dan handler API
@@ -19,6 +20,7 @@ type API struct {
 	grants        AdminGrantSource
 	registry      AdminDatabaseSource
 	migrations    *store.MigrationRepository
+	jobEnqueuer   queue.JobEnqueuer
 }
 
 // Bikin objek API baru dengan service yang dibutuhkan
@@ -42,6 +44,10 @@ func (a *API) Router() http.Handler {
 	a.databaseRoutes(mux)
 	a.editRoutes(mux)
 	a.explorerRoutes(mux)
+	a.migrationToolRoutes(mux)
+	a.migrationDraftRoutes(mux)
+	a.migrationHistoryRoutes(mux)
+	a.migrationEnqueueRoutes(mux)
 	a.webRoutes(mux)
 	return mux
 }

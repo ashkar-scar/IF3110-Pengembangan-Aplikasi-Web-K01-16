@@ -12,18 +12,18 @@ import (
 
 // Satu langkah perubahan DDL hasil diff skema.
 type Change struct {
-	Object      string
-	Description string
-	SQL         string
-	Destructive bool
-	Manual      bool
+	Object      string `json:"object"`
+	Description string `json:"description"`
+	SQL         string `json:"sql"`
+	Destructive bool   `json:"destructive"`
+	Manual      bool   `json:"manual"`
 }
 
 // Daftar perubahan dan SQL siap jalan hasil perbandingan skema.
 type Result struct {
-	Changes []Change
-	SQL     string
-	Manual  bool
+	Changes []Change `json:"changes"`
+	SQL     string   `json:"sql"`
+	Manual  bool     `json:"manual"`
 }
 
 type diffBuilder struct {

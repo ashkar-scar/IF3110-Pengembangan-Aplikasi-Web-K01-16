@@ -2,10 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
 
 type AdminGroupSource interface {
@@ -16,12 +19,20 @@ type AdminGroupSource interface {
 	RemoveMember(context.Context, int64, int64) error
 }
 
+type GroupLeaderEditor interface {
+	SetLeader(context.Context, int64, int64) (core.Group, error)
+}
+
 type groupRequest struct {
 	Name string `json:"name"`
 }
 
 type memberRequest struct {
 	UserID int64 `json:"user_id"`
+}
+
+type leaderRequest struct {
+	LeaderID int64 `json:"leader_id"`
 }
 
 // Memasang repository group pada API
@@ -40,6 +51,10 @@ func (a *API) groupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/groups/{id}/members", a.adminOnly(a.listMembers))
 	mux.HandleFunc("POST /api/admin/groups/{id}/members", a.adminOnly(a.addMember))
 	mux.HandleFunc("DELETE /api/admin/groups/{id}/members/{userID}", a.adminOnly(a.removeMember))
+
+	if _, ok := a.groups.(GroupLeaderEditor); ok {
+		mux.HandleFunc("PUT /api/admin/groups/{id}/leader", a.adminOnly(a.setGroupLeader))
+	}
 }
 
 // Mengirim seluruh group yang tersimpan
@@ -137,4 +152,35 @@ func (a *API) removeMember(w http.ResponseWriter, r *http.Request, _ auth.Authen
 	}
 	
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Menetapkan anggota aktif sebagai leader sebuah group
+func (a *API) setGroupLeader(w http.ResponseWriter, r *http.Request, _ auth.AuthenticationResult) {
+	groupID, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	var request leaderRequest
+	if !readJSON(w, r, &request) {
+		return
+	}
+
+	if request.LeaderID < 1 {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Leader ID tidak valid")
+		return
+	}
+
+	group, err := a.groups.(GroupLeaderEditor).SetLeader(r.Context(), groupID, request.LeaderID)
+
+	switch {
+	case errors.Is(err, store.ErrLeaderNotMember):
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", err.Error())
+
+	case err != nil:
+		adminError(w, err)
+
+	default:
+		writeJSON(w, http.StatusOK, group)
+	}
 }
