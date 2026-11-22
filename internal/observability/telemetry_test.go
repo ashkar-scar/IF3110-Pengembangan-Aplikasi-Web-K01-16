@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -20,6 +22,30 @@ func TestSQLRedaction(t *testing.T) {
 		if strings.Contains(masked, "secret") || strings.Contains(masked, "12345") {
 			t.Fatalf("leaked value: %s", masked)
 		}
+	}
+}
+
+func TestPrepareFailuresAreLoggedWithoutSensitiveDetail(t *testing.T) {
+	previous := slog.Default()
+	defer slog.SetDefault(previous)
+	var output bytes.Buffer
+	slog.SetDefault(JSONLogger(&output))
+	tracer := SQLTracer{Database: "target"}
+	ctx := tracer.TracePrepareStart(context.Background(), nil, pgx.TracePrepareStartData{SQL: `INSERT INTO missing VALUES('private@example.com')`})
+	tracer.TracePrepareEnd(ctx, nil, pgx.TracePrepareEndData{Err: &pgconn.PgError{Code: "42P01", Message: "private@example.com", Detail: "secret password"}})
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("log lines=%d", len(lines))
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(lines[1]), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["event"] != "sql_result" || result["phase"] != "PREPARE" || result["status"] != "FAILED" || result["sqlstate"] != "42P01" {
+		t.Fatalf("prepare failure missing: %v", result)
+	}
+	if strings.Contains(output.String(), "private@example.com") || strings.Contains(output.String(), "secret password") {
+		t.Fatal("prepare log leaked sensitive data")
 	}
 }
 

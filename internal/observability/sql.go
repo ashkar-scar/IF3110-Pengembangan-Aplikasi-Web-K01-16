@@ -35,32 +35,51 @@ type queryState struct {
 	start time.Time
 	query string
 	span  trace.Span
+	phase string
 }
 type SQLTracer struct{ Database string }
 
 func (t SQLTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	ctx, span := Start(ctx, "db.query")
-	query := MaskSQL(data.SQL)
+	return t.start(ctx, data.SQL, "EXECUTE", "db.query")
+}
+
+func (t SQLTracer) TracePrepareStart(ctx context.Context, _ *pgx.Conn, data pgx.TracePrepareStartData) context.Context {
+	return t.start(ctx, data.SQL, "PREPARE", "db.prepare")
+}
+
+func (t SQLTracer) TracePrepareEnd(ctx context.Context, _ *pgx.Conn, data pgx.TracePrepareEndData) {
+	t.end(ctx, 0, data.Err)
+}
+
+func (t SQLTracer) start(ctx context.Context, sql, phase, spanName string) context.Context {
+	ctx, span := Start(ctx, spanName)
+	query := MaskSQL(sql)
 	span.SetAttributes(attribute.String("db.system.name", "postgresql"), attribute.String("db.namespace", t.Database), attribute.String("db.query.text", query))
-	Event(ctx, "sql_start", "RUNNING", "database", t.Database, "query", query, "params", "[REDACTED]")
-	return context.WithValue(ctx, queryKey{}, queryState{time.Now(), query, span})
+	Event(ctx, "sql_start", "RUNNING", "database", t.Database, "query", query, "params", "[REDACTED]", "phase", phase)
+	return context.WithValue(ctx, queryKey{}, queryState{time.Now(), query, span, phase})
 }
 func (t SQLTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	t.end(ctx, data.CommandTag.RowsAffected(), data.Err)
+}
+
+func (t SQLTracer) end(ctx context.Context, rows int64, err error) {
 	state, ok := ctx.Value(queryKey{}).(queryState)
 	if !ok {
 		return
 	}
 	status := "SUCCESS"
-	if data.Err != nil {
+	if err != nil {
 		status = "FAILED"
 	}
 	Event(ctx, "sql_result", status, "database", t.Database, "query", state.query, "params", "[REDACTED]",
-		"duration_ms", float64(time.Since(state.start).Microseconds())/1000, "rows_affected", data.CommandTag.RowsAffected(), "error", SafeError(data.Err), "sqlstate", SQLState(data.Err))
-	switch strings.TrimSpace(state.query) {
-	case "COMMIT":
-		Event(ctx, "tx_commit", status)
-	case "ROLLBACK":
-		Event(ctx, "tx_rollback", status)
+		"duration_ms", float64(time.Since(state.start).Microseconds())/1000, "rows_affected", rows, "error", SafeError(err), "sqlstate", SQLState(err), "phase", state.phase)
+	if state.phase == "EXECUTE" {
+		switch strings.TrimSpace(state.query) {
+		case "COMMIT":
+			Event(ctx, "tx_commit", status)
+		case "ROLLBACK":
+			Event(ctx, "tx_rollback", status)
+		}
 	}
-	End(state.span, data.Err)
+	End(state.span, err)
 }

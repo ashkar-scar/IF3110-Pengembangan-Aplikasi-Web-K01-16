@@ -285,7 +285,7 @@ func (s *WorkerSession) ExecuteNormal(ctx context.Context, e WorkerExecution) (W
 	if e.Request.Action == core.ActionRollback {
 		query = e.Request.SQLSnapshotDown
 	}
-	statements, err := sqlguard.Migration(query)
+	statements, err := sqlguard.PostgresMigration(query)
 	if err != nil {
 		return WorkerResult{}, err
 	}
@@ -303,7 +303,7 @@ func (s *WorkerSession) ExecuteNormal(ctx context.Context, e WorkerExecution) (W
 	}
 	var rows int64
 	for _, statement := range statements {
-		result, err := tx.ExecContext(ctx, statement.SQL)
+		result, err := executePostgresStatement(ctx, tx, statement)
 		if err != nil {
 			return WorkerResult{}, err
 		}
