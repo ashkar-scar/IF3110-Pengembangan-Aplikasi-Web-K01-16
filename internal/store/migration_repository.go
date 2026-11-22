@@ -22,7 +22,7 @@ var (
 
 const (
 	draftColumns   = "id, target_id, description, sql_up, sql_down, is_irreversible, irreversible_reason, execution_mode, batch_column, batch_size, is_locked, created_by, revision, base_version, fingerprint, created_at, updated_at"
-	attemptColumns = "id, target_id, draft_id, draft_revision, description, sql_text, actor_id, actor_name, base_version, version, status, safe_error, started_at, finished_at"
+	attemptColumns = "id, target_id, draft_id, draft_revision, request_id, job_id, action_type, reverts_execution_id, attempt_no, batch_no, description, sql_text, actor_id, actor_name, base_version, version, status, safe_error, started_at, finished_at"
 )
 
 // Repository draft dan riwayat attempt migration di database platform.
@@ -99,6 +99,12 @@ func scanAttempt(row pgx.Row) (core.Attempt, error) {
 		&attempt.TargetID,
 		&attempt.DraftID,
 		&attempt.Revision,
+		&attempt.RequestID,
+		&attempt.JobID,
+		&attempt.Action,
+		&attempt.RevertsExecutionID,
+		&attempt.AttemptNo,
+		&attempt.BatchNo,
 		&attempt.Description,
 		&attempt.SQL,
 		&attempt.ActorID,
@@ -281,6 +287,25 @@ func (repository *MigrationRepository) BeginAttempt(
 		return attempt, "", false, ErrDraftConflict
 	}
 
+	existingQuery := `
+		SELECT ` + attemptColumns + `
+		FROM migration_attempts
+		WHERE draft_id = $1
+			AND draft_revision = $2
+			AND request_id IS NULL
+			AND action_type = 'UP'
+		ORDER BY started_at DESC, id DESC
+		LIMIT 1
+	`
+	existing, existingErr := scanAttempt(transaction.QueryRow(ctx, existingQuery, draft.ID, draft.Revision))
+	if existingErr == nil {
+		return existing, draft.Fingerprint, false, nil
+	}
+	
+	if !errors.Is(existingErr, ErrAttemptNotFound) {
+		return attempt, "", false, existingErr
+	}
+
 	if _, err = transaction.Exec(ctx, `
 		UPDATE migration_drafts
 		SET is_locked = TRUE, updated_at = now()
@@ -303,9 +328,8 @@ func (repository *MigrationRepository) BeginAttempt(
 			status
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RUNNING')
-		ON CONFLICT (draft_id, draft_revision) DO NOTHING
 	`
-	tag, err := transaction.Exec(
+	_, err = transaction.Exec(
 		ctx,
 		insertAttemptQuery,
 		attemptID,
@@ -325,10 +349,9 @@ func (repository *MigrationRepository) BeginAttempt(
 	fetchAttemptQuery := `
 		SELECT ` + attemptColumns + `
 		FROM migration_attempts
-		WHERE draft_id = $1
-		  AND draft_revision = $2
+		WHERE id = $1
 	`
-	attempt, err = scanAttempt(transaction.QueryRow(ctx, fetchAttemptQuery, draft.ID, draft.Revision))
+	attempt, err = scanAttempt(transaction.QueryRow(ctx, fetchAttemptQuery, attemptID))
 	if err != nil {
 		return attempt, "", false, err
 	}
@@ -337,7 +360,7 @@ func (repository *MigrationRepository) BeginAttempt(
 		return attempt, "", false, fmt.Errorf("Gagal menyimpan attempt: %w", err)
 	}
 
-	return attempt, draft.Fingerprint, tag.RowsAffected() == 1, nil
+	return attempt, draft.Fingerprint, true, nil
 }
 
 // Simpan status akhir, versi, dan pesan error aman attempt.
