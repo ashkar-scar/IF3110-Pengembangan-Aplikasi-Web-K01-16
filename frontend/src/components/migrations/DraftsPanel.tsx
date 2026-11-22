@@ -1,15 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { createDraft, explainSql, submitDraftReview, updateDraft } from "../../api/migrations";
 import { ApiRequestError } from "../../types/auth";
+import type { DatabaseSnapshot } from "../../types/database";
 import type {
     ExecutionMode,
     ExplainResponse,
     MigrationDraft,
     PlanNode,
 } from "../../types/migration";
+import type { GeneratedDraftSql } from "../../utils/sqlBuilder";
+import { SchemaBuilder } from "./SchemaBuilder";
 
 interface DraftsPanelProps {
     targetId: number;
+    driver: string;
+    schemaSnapshot: DatabaseSnapshot | null;
     canEdit: boolean;
     drafts: MigrationDraft[];
     initialSql?: string;
@@ -36,6 +41,8 @@ function PlanTree({ nodes }: { nodes: PlanNode[] }) {
 
 export function DraftsPanel({
     targetId,
+    driver,
+    schemaSnapshot,
     canEdit,
     drafts,
     initialSql = "",
@@ -86,6 +93,17 @@ export function DraftsPanel({
         setExecutionMode(draft.execution_mode);
         setBatchColumn(draft.batch_column || "id");
         setBatchSize(String(draft.batch_size || 1000));
+        setExplainResult(null);
+        setError("");
+        setNotice("");
+    }
+
+    function handleApplyBuilderSql(generated: GeneratedDraftSql) {
+        setDescription(generated.description);
+        setSqlUp(generated.sqlUp);
+        setSqlDown(generated.sqlDown);
+        setIsIrreversible(generated.isIrreversible);
+        setIrreversibleReason(generated.irreversibleReason);
         setExplainResult(null);
         setError("");
         setNotice("");
@@ -205,6 +223,14 @@ export function DraftsPanel({
                             </button>
                         )}
                     </div>
+
+                    {!isLockedView && (
+                        <SchemaBuilder
+                            driver={driver}
+                            schemaSnapshot={schemaSnapshot}
+                            onApply={handleApplyBuilderSql}
+                        />
+                    )}
 
                     <form onSubmit={handleSaveDraft}>
                         <div className="form-grid">

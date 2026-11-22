@@ -3,9 +3,11 @@ package targetdb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
 	"net"
 	"net/url"
@@ -129,4 +131,36 @@ func (conn *Connection) Version(ctx context.Context) (int64, error) {
 	var version int64
 	err = conn.DB.QueryRowContext(ctx, query).Scan(&version)
 	return version, err
+}
+
+// Membuat database PostgreSQL baru jika belum tersedia melalui database postgres.
+func EnsurePostgresDatabase(ctx context.Context, adminConfig Config, adminPassword, targetDatabase, ownerUsername string) error {
+	maintenance := adminConfig
+	maintenance.Database = "postgres"
+	conn, err := OpenPostgres(ctx, maintenance, adminPassword)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var exists bool
+	if err := conn.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", targetDatabase).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	query := "CREATE DATABASE " + Quote(targetDatabase)
+	if ownerUsername != "" {
+		query += " OWNER " + Quote(ownerUsername)
+	}
+	if _, err := conn.DB.ExecContext(ctx, query); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42P04" {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

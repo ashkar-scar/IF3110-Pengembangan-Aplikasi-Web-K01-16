@@ -1224,6 +1224,13 @@ button:disabled {
   padding-inline-start: var(--space-4);
 }
 
+.schema-col-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) minmax(120px, 1fr) minmax(130px, 1.2fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
 .checkbox-inline {
   display: inline-flex;
   align-items: center;
@@ -1555,7 +1562,8 @@ button:disabled {
   }
 
   .docs-shell,
-  .explorer-grid {
+  .explorer-grid,
+  .schema-col-row {
     grid-template-columns: 1fr;
   }
 

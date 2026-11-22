@@ -47,4 +47,7 @@ export interface SaveTargetPayload {
     password: string;
     sslmode: string;
     is_active: boolean;
+    create_database?: boolean;
+    creator_username?: string;
+    creator_password?: string;
 }
