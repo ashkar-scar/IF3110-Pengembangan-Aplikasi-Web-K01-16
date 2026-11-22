@@ -1,0 +1,1249 @@
+/* Mengumpulkan palet washi paper Studio CEL, skala font golden ratio (phi = 1.618), dan grid 4px */
+:root {
+  /* Menjaga lebar layout gak geser pas scrollbar vertikal muncul atau hilang di Windows */
+  scrollbar-gutter: stable;
+  --text: #1c2128;
+  --muted: #4e555e;
+  --border: #1c2128;
+  --border-soft: #d8cfbf;
+  --background: #f7f3eb;
+  --surface: #ffffff;
+  --surface-subtle: #efe8dc;
+  --blue: #236b52;
+  --blue-hover: #1a523f;
+  --blue-soft: #e6f1ec;
+  --green-bg: #e6f1ec;
+  --green: #1b5e43;
+  --red-bg: #fceae8;
+  --red: #b83227;
+  --yellow-bg: #fdf3e1;
+  --yellow: #9a5b13;
+
+  --shadow-cel: 3px 3px 0 #1c2128;
+  --shadow-cel-sm: 2px 2px 0 #1c2128;
+
+  /* Skala jarak kelipatan 4px/8px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+
+  /* Skala font golden ratio (base 1rem = 16px, sqrt(phi) = 1.272, phi = 1.618) */
+  --text-xs: 0.786rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.272rem;
+  --text-xl: 1.618rem;
+  --text-2xl: 2.058rem;
+
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-block-size: 100dvb;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: var(--text-xl);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: var(--text-lg);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: var(--text-base);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+a {
+  color: var(--blue);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-soft);
+}
+
+.app-shell {
+  position: relative;
+  min-block-size: 100dvb;
+  cursor: url("./assets/cursor-arrow.svg") 2 2, auto;
+}
+
+.app-shell a,
+.app-shell button:not(:disabled),
+.app-shell select:not(:disabled),
+.app-shell summary,
+.app-shell [role="button"],
+.app-shell .checkbox-row label,
+.app-shell .checkbox-inline {
+  cursor: url("./assets/cursor-pointer.svg") 3 2, pointer;
+}
+
+.app-shell input:not([type="checkbox"]),
+.app-shell textarea,
+.app-shell pre,
+.app-shell code {
+  cursor: text;
+}
+
+/* Memasang wallpaper studio anime di belakang + efek napas & partikel cahaya */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-backdrop-img {
+  position: absolute;
+  inset: -4%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  animation: studio-drift 26s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.app-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(247, 243, 235, 0.78);
+}
+
+.studio-motes {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.studio-motes span {
+  position: absolute;
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: rgba(35, 107, 82, 0.22);
+  border: 1px solid rgba(28, 33, 40, 0.18);
+  animation: mote-float 14s linear infinite;
+  will-change: transform, opacity;
+}
+
+.studio-motes span:nth-child(1) {
+  inset-inline-start: 10%;
+  inset-block-end: -20px;
+  animation-duration: 16s;
+  animation-delay: 0s;
+}
+
+.studio-motes span:nth-child(2) {
+  inset-inline-start: 28%;
+  inset-block-end: -20px;
+  inline-size: 7px;
+  block-size: 7px;
+  background: rgba(184, 50, 39, 0.18);
+  animation-duration: 19s;
+  animation-delay: 3s;
+}
+
+.studio-motes span:nth-child(3) {
+  inset-inline-start: 48%;
+  inset-block-end: -20px;
+  animation-duration: 15s;
+  animation-delay: 6s;
+}
+
+.studio-motes span:nth-child(4) {
+  inset-inline-start: 68%;
+  inset-block-end: -20px;
+  inline-size: 12px;
+  block-size: 12px;
+  background: rgba(253, 243, 225, 0.65);
+  animation-duration: 21s;
+  animation-delay: 1s;
+}
+
+.studio-motes span:nth-child(5) {
+  inset-inline-start: 84%;
+  inset-block-end: -20px;
+  inline-size: 8px;
+  block-size: 8px;
+  animation-duration: 17s;
+  animation-delay: 4s;
+}
+
+.studio-motes span:nth-child(6) {
+  inset-inline-start: 93%;
+  inset-block-end: -20px;
+  background: rgba(154, 91, 19, 0.2);
+  animation-duration: 20s;
+  animation-delay: 8s;
+}
+
+@keyframes studio-drift {
+  0% {
+    transform: scale(1.03) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.09) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+@keyframes mote-float {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(45deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  85% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(32px, -105dvh, 0) rotate(225deg);
+    opacity: 0;
+  }
+}
+
+@keyframes yuzuki-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes yuzuki-hop {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  25% {
+    transform: translateY(3px) scale(1.06, 0.93);
+  }
+  55% {
+    transform: translateY(-14px) scale(0.97, 1.04);
+  }
+  80% {
+    transform: translateY(0) scale(1.03, 0.97);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+@keyframes yuzuki-dangle {
+  0%,
+  100% {
+    transform: rotate(-4deg) scale(1.04);
+  }
+  50% {
+    transform: rotate(4deg) scale(1.04);
+  }
+}
+
+@keyframes bubble-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.yuzuki-slot.is-companion {
+  position: fixed;
+  inset-inline-end: 18px;
+  inset-block-end: 0;
+  z-index: 20;
+  display: block;
+  pointer-events: none;
+}
+
+.yuzuki-slot.is-inline {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.yuzuki-trigger {
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-block-size: auto;
+  line-height: 0;
+  user-select: none;
+}
+
+.yuzuki-slot.is-companion .yuzuki-trigger {
+  touch-action: none;
+  cursor: grab;
+}
+
+.yuzuki-slot.is-companion .yuzuki-trigger.is-drag {
+  cursor: grabbing;
+}
+
+.yuzuki-trigger:hover:not(:disabled) {
+  background: transparent;
+  transform: none;
+}
+
+.yuzuki-trigger:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.yuzuki-stage {
+  position: relative;
+  display: block;
+  filter: drop-shadow(2px 2px 0 #1c2128);
+  animation: yuzuki-bob 5s ease-in-out infinite;
+}
+
+.yuzuki-slot.is-companion .yuzuki-stage {
+  inline-size: 102px;
+  block-size: 172px;
+}
+
+.yuzuki-slot.is-inline .yuzuki-stage {
+  inline-size: 70px;
+  block-size: 118px;
+}
+
+.yuzuki-trigger.is-hover .yuzuki-stage {
+  animation-play-state: paused;
+}
+
+.yuzuki-trigger.is-happy .yuzuki-stage,
+.yuzuki-trigger.is-wink .yuzuki-stage,
+.yuzuki-trigger.is-surprised .yuzuki-stage {
+  animation: yuzuki-hop 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.yuzuki-trigger.is-drag .yuzuki-stage {
+  animation: yuzuki-dangle 280ms ease-in-out infinite;
+}
+
+.yuzuki-sprite {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  display: block;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+
+.yuzuki-sprite.is-active {
+  opacity: 1;
+}
+
+.yuzuki-bubble {
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-cel-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  animation: bubble-pop 160ms ease-out;
+}
+
+.yuzuki-slot.is-companion .yuzuki-bubble {
+  inset-block-end: calc(100% + 8px);
+  inset-inline-end: 0;
+}
+
+.yuzuki-slot.is-companion.is-bubble-below .yuzuki-bubble {
+  inset-block-end: auto;
+  inset-block-start: calc(100% + 8px);
+}
+
+.yuzuki-slot.is-inline .yuzuki-bubble {
+  inset-block-start: -34px;
+  inset-inline-start: 0;
+}
+
+@media (max-width: 1320px) {
+  .yuzuki-slot.is-companion {
+    display: none;
+  }
+}
+
+.topbar,
+.app-main {
+  position: relative;
+  z-index: 1;
+}
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: -9999px;
+  inset-block-start: var(--space-2);
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--blue);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  inset-inline-start: var(--space-4);
+}
+
+/* Mengatur navbar atas bergaya tinta cel-shaded */
+.topbar {
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1.5px solid var(--border);
+}
+
+.topbar-inner {
+  max-inline-size: 1200px;
+  margin-inline: auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brand-mark {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.menu-toggle {
+  display: none;
+  margin-inline-start: auto;
+}
+
+.nav-panel {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.nav-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nav-links a {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid transparent;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--muted);
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.nav-links a:hover {
+  color: var(--text);
+  background: var(--surface-subtle);
+}
+
+/* Menandai menu aktif pakai bingkai cel + tinta aktif, gak cuma warna aja */
+.nav-links a[aria-current="page"] {
+  color: #ffffff;
+  background: var(--blue);
+  border-color: var(--border);
+  box-shadow: var(--shadow-cel-sm);
+}
+
+.nav-user {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.user-chip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.app-main {
+  max-inline-size: 1200px;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4) 48px;
+  min-inline-size: 0;
+}
+
+/* Mengatur panel cel-shaded berbingkai tinta tegas tanpa bayangan blur */
+.card {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-cel);
+  padding: var(--space-4);
+  min-inline-size: 0;
+}
+
+.muted {
+  color: var(--muted);
+  max-inline-size: 65ch;
+}
+
+button {
+  min-block-size: 40px;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-cel-sm);
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 80ms ease, box-shadow 80ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-subtle);
+}
+
+button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+button.primary {
+  background: var(--blue);
+  border-color: var(--border);
+  color: #ffffff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--blue-hover);
+}
+
+button.danger {
+  color: var(--red);
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+
+button.danger:hover:not(:disabled) {
+  background: #f9dad7;
+}
+
+:focus-visible {
+  outline: 2.5px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Membuat tabel & editor SQL bisa digeser ke samping di layar sempit */
+.table-scroll {
+  inline-size: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Mengatur layout split halaman Login bertema Studio CEL */
+.login-stage {
+  min-block-size: 100dvb;
+  display: grid;
+  place-items: center;
+}
+
+.login-single {
+  max-inline-size: 440px;
+  margin-block: var(--space-8);
+  margin-inline: auto;
+}
+
+.login-shell {
+  inline-size: 100%;
+  max-inline-size: 920px;
+  padding: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+}
+
+.login-art {
+  position: relative;
+  overflow: hidden;
+  border-inline-end: 1.5px solid var(--border);
+  background: var(--surface-subtle);
+  min-block-size: 420px;
+}
+
+/* Mengunci gambar ke frame kolom biar tinggi kartu gak melar ngikutin resolusi asli gambar */
+.login-art-img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  animation: studio-drift 22s ease-in-out infinite alternate;
+}
+
+.login-pane {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--blue);
+  margin-block-end: var(--space-3);
+}
+
+.login-pane h1 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xl);
+}
+
+.login-pane .muted {
+  margin: 0 0 var(--space-6);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-end: var(--space-4);
+}
+
+.field label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+input,
+select,
+textarea {
+  inline-size: 100%;
+  min-block-size: 44px;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: max(1rem, 1em);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  background: #fffdf9;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-subtle);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+button.full-width {
+  inline-size: 100%;
+}
+
+button:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.alert {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid currentColor;
+  box-shadow: var(--shadow-cel-sm);
+  margin-block: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.alert.error {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.alert.success {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.alert.warning {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+
+.state-box {
+  padding: var(--space-4);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.state-box.is-error {
+  border-style: solid;
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+
+.state-box.is-error .state-title {
+  color: var(--red);
+}
+
+.state-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 220px;
+}
+
+.state-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.state-box p {
+  margin: 0;
+}
+
+/* Mengatur header halaman, badge stamp, tombol link, dan tabel */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+.page-header h1,
+.page-header h2 {
+  margin: 0 0 var(--space-1);
+}
+
+.page-header .muted {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-cel-sm);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: background-color 120ms ease, transform 80ms ease, box-shadow 80ms ease;
+}
+
+.btn:hover {
+  background: var(--surface-subtle);
+}
+
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--surface-subtle);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.badge.info {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.badge.success {
+  background: var(--green-bg);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.badge.danger {
+  background: var(--red-bg);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.badge.warning {
+  background: var(--yellow-bg);
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.data-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1.5px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.data-table tbody tr:hover {
+  background: var(--background);
+}
+
+/* Mengatur layout grid 2 kolom, segmented tab bar, dan pagination Explorer */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.breadcrumb {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.explorer-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.explorer-sidebar {
+  position: sticky;
+  inset-block-start: var(--space-4);
+}
+
+.explorer-content {
+  min-block-size: 320px;
+}
+
+.explorer-content h2,
+.explorer-content h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.table-scroll.is-loading {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.table-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-block-size: 420px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.table-item {
+  inline-size: 100%;
+  min-block-size: 36px;
+  text-align: left;
+  border: 1.5px solid transparent;
+  box-shadow: none;
+  background: transparent;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.table-item:hover:not(:disabled) {
+  background: var(--surface-subtle);
+}
+
+.table-item:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.table-item:focus-visible {
+  outline-offset: -2px;
+}
+
+.table-item.is-active {
+  background: var(--blue-soft);
+  border-color: var(--border);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.tab-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border);
+}
+
+.tab-group button {
+  min-block-size: 36px;
+  padding: var(--space-1) var(--space-3);
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tab-group button:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.tab-group button.is-active {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-cel-sm);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.null-pill {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+}
+
+.pagination-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Mengatur form multi-kolom dan baris checkbox di panel administrasi */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-block-end: var(--space-4);
+}
+
+.checkbox-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.checkbox-row input[type="checkbox"] {
+  inline-size: 16px;
+  block-size: 16px;
+  min-block-size: auto;
+  margin: 0;
+}
+
+.btn-sm {
+  min-block-size: 32px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.inline-form input,
+.inline-form select {
+  flex: 1 1 240px;
+}
+
+.group-item {
+  padding: var(--space-2);
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.group-item.is-active {
+  border-color: var(--border);
+  background: var(--blue-soft);
+  box-shadow: var(--shadow-cel-sm);
+}
+
+/* Mengatur editor SQL, preview explain plan, dan kotak detail di halaman migration */
+.code-input {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.sql-preview {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.details-box {
+  margin-block-start: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.details-box summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-tree {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-4);
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.checkbox-inline input[type="checkbox"] {
+  inline-size: 16px;
+  block-size: 16px;
+  min-block-size: auto;
+  margin: 0;
+}
+
+.progress-track {
+  inline-size: 100%;
+  block-size: 10px;
+  margin-block-start: var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  overflow: hidden;
+}
+
+.progress-bar {
+  block-size: 100%;
+  background: var(--blue);
+  transition: inline-size 200ms ease;
+}
+
+/* Mengubah navbar jadi menu lipat, menumpuk login art, & melepas sticky sidebar pas dibuka di HP */
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: inline-block;
+  }
+
+  .nav-panel {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding-block-start: var(--space-3);
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .nav-panel.is-open {
+    display: flex;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .nav-user {
+    justify-content: space-between;
+    padding-block-start: var(--space-2);
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .login-art {
+    border-inline-end: none;
+    border-bottom: 1.5px solid var(--border);
+    min-block-size: 180px;
+    max-block-size: 200px;
+  }
+
+  .login-art-img {
+    position: static;
+    block-size: 180px;
+  }
+
+  .explorer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .explorer-sidebar {
+    position: static;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
