@@ -214,25 +214,33 @@ export function ExplorerPage() {
             <section className="card">
                 <div className="page-header">
                     <div>
-                        <p className="breadcrumb">
-                            <Link to="/databases">Daftar Database</Link> / Explorer
-                        </p>
+                        <nav className="breadcrumb" aria-label="Navigasi halaman">
+                            <Link to="/databases">Daftar Database</Link>
+                            <span className="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span className="breadcrumb-current">Explorer</span>
+                        </nav>
                         <h1>{target ? target.name : `Database #${id}`}</h1>
                         {schemaData && (
-                            <p className="muted">
-                                <code>{schemaData.snapshot.driver}</code>
+                            <div className="meta-row">
+                                <span className="meta-chip">
+                                    <span className="meta-label">Driver</span>
+                                    <code>{schemaData.snapshot.driver}</code>
+                                </span>
                                 {target && (
-                                    <>
-                                        {" "}
+                                    <span className="meta-chip">
+                                        <span className="meta-label">Izin</span>
                                         <span
                                             className={`badge ${target.permission === "EDIT" ? "success" : "info"}`}
                                         >
                                             {target.permission}
                                         </span>
-                                    </>
-                                )}{" "}
-                                ({schemaData.version})
-                            </p>
+                                    </span>
+                                )}
+                                <span className="meta-chip">
+                                    <span className="meta-label">Versi Skema</span>
+                                    <strong>v{schemaData.version}</strong>
+                                </span>
+                            </div>
                         )}
                     </div>
 

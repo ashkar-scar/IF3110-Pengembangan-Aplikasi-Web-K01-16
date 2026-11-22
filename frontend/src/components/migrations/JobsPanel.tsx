@@ -76,8 +76,12 @@ export function JobsPanel({ canEdit, jobs, onRefresh }: JobsPanelProps) {
         setBusyId(jobId);
 
         try {
-            await cancelBatchJob(jobId);
-            setNotice(`Permintaan cancel batch untuk job ${jobId} diproses.`);
+            const res = await cancelBatchJob(jobId);
+            setNotice(
+                res.request_id
+                    ? `Pengajuan cancel batch #${res.request_id} dibuat (perlu approval di tab Review & Approval).`
+                    : `Permintaan cancel batch untuk job ${jobId} diproses.`,
+            );
             await onRefresh();
         } catch (err) {
             setError(

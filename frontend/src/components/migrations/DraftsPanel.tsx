@@ -153,6 +153,9 @@ export function DraftsPanel({
 
         try {
             await submitDraftReview(targetId, draftId);
+            if (selectedDraftId === draftId) {
+                setIsLockedView(true);
+            }
             await onRefresh();
             onSubmittedReview();
         } catch (err) {

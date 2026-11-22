@@ -102,10 +102,13 @@ export function DiffPage() {
             <section className="card">
                 <div className="page-header">
                     <div>
-                        <p className="breadcrumb">
-                            <Link to="/databases">Daftar Database</Link> /{" "}
-                            <Link to={`/databases/${id}`}>Explorer</Link> / Schema Diff
-                        </p>
+                        <nav className="breadcrumb" aria-label="Navigasi halaman">
+                            <Link to="/databases">Daftar Database</Link>
+                            <span className="breadcrumb-sep" aria-hidden="true">/</span>
+                            <Link to={`/databases/${id}`}>Explorer</Link>
+                            <span className="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span className="breadcrumb-current">Schema Diff</span>
+                        </nav>
                         <h1>
                             Schema Diff: {currentTarget ? currentTarget.name : `Database #${id}`}
                         </h1>
