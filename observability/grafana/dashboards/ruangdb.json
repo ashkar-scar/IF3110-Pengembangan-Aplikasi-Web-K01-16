@@ -1,0 +1,319 @@
+{
+  "uid": "ruangdb-worker",
+  "title": "RuangDB Worker and Migration",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Job per status",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(action_type,status)(ruangdb_jobs{job=\"ruangdb-worker\"})",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Queue wait p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le,action_type)(rate(ruangdb_queue_wait_seconds_bucket[5m])))",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Migration duration p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le,action_type)(rate(ruangdb_migration_duration_seconds_bucket[5m])))",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Lock wait p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le,action_type)(rate(ruangdb_lock_wait_seconds_bucket[5m])))",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Pool active / idle",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(pool)(ruangdb_pool_active)",
+          "refId": "A",
+          "legendFormat": "{{pool}} active"
+        },
+        {
+          "expr": "sum by(pool)(ruangdb_pool_idle)",
+          "refId": "B",
+          "legendFormat": "{{pool}} idle"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Pool wait accumulated",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(pool)(ruangdb_pool_wait_seconds_total)",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Retry",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(action_type)(ruangdb_retries_total)",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Batch committed / compensated",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(action_type)(ruangdb_batches_total)",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Rows committed / compensated",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "sum by(action_type)(ruangdb_rows_total)",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Storage scrape health",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "metrics"
+      },
+      "targets": [
+        {
+          "expr": "ruangdb_metrics_storage_up",
+          "refId": "A",
+          "legendFormat": "{{action_type}} {{status}} {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "title": "Correlated worker logs",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "logs"
+      },
+      "targets": [
+        {
+          "expr": "{service_name=\"ruangdb-worker\"}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
