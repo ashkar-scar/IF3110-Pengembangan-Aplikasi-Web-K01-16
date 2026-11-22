@@ -59,7 +59,7 @@ export function HistoryPanel({
         }
     }
 
-    const attempts = history?.attempts ?? [];
+    const attempts = history?.history ?? history?.attempts ?? [];
 
     return (
         <div className="stack">

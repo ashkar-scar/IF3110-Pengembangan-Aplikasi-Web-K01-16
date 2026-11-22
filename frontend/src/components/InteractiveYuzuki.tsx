@@ -260,35 +260,35 @@ export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
                         alt=""
                         aria-hidden="true"
                         draggable={false}
-                        className={`yuzuki-sprite is-overlay ${activeMood === "hover" ? "is-active" : ""}`}
+                        className={`yuzuki-sprite ${activeMood === "hover" ? "is-active" : ""}`}
                     />
                     <img
                         src={yuzukiClick}
                         alt=""
                         aria-hidden="true"
                         draggable={false}
-                        className={`yuzuki-sprite is-overlay ${activeMood === "happy" ? "is-active" : ""}`}
+                        className={`yuzuki-sprite ${activeMood === "happy" ? "is-active" : ""}`}
                     />
                     <img
                         src={yuzukiWink}
                         alt=""
                         aria-hidden="true"
                         draggable={false}
-                        className={`yuzuki-sprite is-overlay ${activeMood === "wink" ? "is-active" : ""}`}
+                        className={`yuzuki-sprite ${activeMood === "wink" ? "is-active" : ""}`}
                     />
                     <img
                         src={yuzukiSurprised}
                         alt=""
                         aria-hidden="true"
                         draggable={false}
-                        className={`yuzuki-sprite is-overlay ${activeMood === "surprised" ? "is-active" : ""}`}
+                        className={`yuzuki-sprite ${activeMood === "surprised" ? "is-active" : ""}`}
                     />
                     <img
                         src={yuzukiDrag}
                         alt=""
                         aria-hidden="true"
                         draggable={false}
-                        className={`yuzuki-sprite is-overlay ${activeMood === "drag" ? "is-active" : ""}`}
+                        className={`yuzuki-sprite ${activeMood === "drag" ? "is-active" : ""}`}
                     />
                 </span>
             </button>

@@ -142,7 +142,7 @@ export function ReviewsPanel({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {req.approvals.map((app) => (
+                                    {(req.approvals ?? []).map((app) => (
                                         <tr key={app.group_id}>
                                             <td>{app.group_name}</td>
                                             <td>{app.leader_name}</td>

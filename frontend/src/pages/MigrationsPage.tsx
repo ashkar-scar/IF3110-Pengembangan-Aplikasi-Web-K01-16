@@ -195,7 +195,7 @@ export function MigrationsPage() {
                         className={activeTab === "history" ? "is-active" : ""}
                         onClick={() => selectTab("history")}
                     >
-                        History ({history?.attempts.length ?? 0})
+                        History ({(history?.history ?? history?.attempts ?? []).length})
                     </button>
                 </div>
 

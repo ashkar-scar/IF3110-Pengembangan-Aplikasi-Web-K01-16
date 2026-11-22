@@ -95,6 +95,8 @@ export function DiffPage() {
         navigate(`/databases/${id}/migrations?sql=${encodeURIComponent(result.sql)}`);
     }
 
+    const diffChanges = result?.changes ?? [];
+
     return (
         <div className="stack">
             <section className="card">
@@ -211,7 +213,7 @@ export function DiffPage() {
                 <section className="card stack">
                     <div className="page-header">
                         <div>
-                            <h2>Hasil Perbandingan ({result.changes.length} perubahan)</h2>
+                            <h2>Hasil Perbandingan ({diffChanges.length} perubahan)</h2>
                             <p className="muted">
                                 Fingerprint: <code>{result.fingerprint}</code>
                             </p>
@@ -230,7 +232,7 @@ export function DiffPage() {
                         </p>
                     )}
 
-                    {result.changes.length === 0 ? (
+                    {diffChanges.length === 0 ? (
                         <p className="muted">Tidak ada perbedaan skema antara kedua schema.</p>
                     ) : (
                         <>
@@ -245,7 +247,7 @@ export function DiffPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {result.changes.map((ch, idx) => (
+                                        {diffChanges.map((ch, idx) => (
                                             <tr key={`${ch.object}-${idx}`}>
                                                 <td>
                                                     <code>{ch.object}</code>

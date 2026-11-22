@@ -89,8 +89,8 @@ export interface MigrationRequest {
     status: ReviewStatus;
     requested_by_name: string;
     can_current_user_approve: boolean;
-    approvals: MigrationApproval[];
-    job_id: string | null;
+    approvals?: MigrationApproval[] | null;
+    job_id?: string | null;
     created_at?: string;
 }
 
@@ -139,7 +139,8 @@ export interface HistoryAttempt {
 }
 
 export interface HistoryResponse {
-    attempts: HistoryAttempt[];
+    history?: HistoryAttempt[];
+    attempts?: HistoryAttempt[];
     has_more: boolean;
     can_rollback_exec_id?: string | null;
     can_forward_exec_id?: string | null;

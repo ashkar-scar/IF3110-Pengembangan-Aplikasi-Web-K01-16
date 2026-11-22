@@ -142,7 +142,11 @@ export function GroupsPanel({ groups, users, onRefresh }: GroupsPanelProps) {
         setIsSubmitting(true);
 
         try {
-            const nextLeaderId = effectiveLeaderId ? Number(effectiveLeaderId) : null;
+            const nextLeaderId = effectiveLeaderId ? Number(effectiveLeaderId) : 0;
+            if (nextLeaderId < 1) {
+                setError("Pilih user aktif sebagai leader group.");
+                return;
+            }
             await setGroupLeader(selectedGroup.id, nextLeaderId);
             setLeaderUserId("");
             setNotice(`Leader group "${selectedGroup.name}" berhasil diperbarui.`);
@@ -317,6 +321,7 @@ export function GroupsPanel({ groups, users, onRefresh }: GroupsPanelProps) {
                                     id="group-leader-select"
                                     value={effectiveLeaderId}
                                     onChange={(e) => setLeaderUserId(e.target.value)}
+                                    required
                                 >
                                     <option value="">-- Belum ditentukan --</option>
                                     {users
