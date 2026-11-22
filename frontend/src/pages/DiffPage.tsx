@@ -19,6 +19,7 @@ export function DiffPage() {
     const [allowDestructive, setAllowDestructive] = useState(false);
 
     const [result, setResult] = useState<SchemaDiffResponse | null>(null);
+    const [resultAllowDestructive, setResultAllowDestructive] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isComparing, setIsComparing] = useState(false);
     const [error, setError] = useState("");
@@ -65,8 +66,7 @@ export function DiffPage() {
         currentTarget ? item.driver === currentTarget.driver : true,
     );
 
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
+    async function runComparison(nextAllowDestructive: boolean) {
         if (!sourceId || !Number.isInteger(targetId)) return;
 
         setError("");
@@ -78,8 +78,9 @@ export function DiffPage() {
                 source_id: Number(sourceId),
                 current_schema: currentSchema.trim(),
                 desired_schema: desiredSchema.trim(),
-                allow_destructive: allowDestructive,
+                allow_destructive: nextAllowDestructive,
             });
+            setResultAllowDestructive(nextAllowDestructive);
             setResult(diff);
         } catch (err) {
             setError(
@@ -90,12 +91,40 @@ export function DiffPage() {
         }
     }
 
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        await runComparison(allowDestructive);
+    }
+
     function sendSqlToDraft() {
         if (!result?.sql) return;
         navigate(`/databases/${id}/migrations?sql=${encodeURIComponent(result.sql)}`);
     }
 
     const diffChanges = result?.changes ?? [];
+    const canEdit = currentTarget?.permission === "EDIT";
+    const skippedDestructiveCount = !resultAllowDestructive
+        ? diffChanges.filter((item) => item.destructive && !item.manual).length
+        : 0;
+    const includedDestructiveCount = resultAllowDestructive
+        ? diffChanges.filter((item) => item.destructive && !item.manual).length
+        : 0;
+    const hasHiddenDestructive = skippedDestructiveCount > 0;
+    const hasManualChanges = diffChanges.some((item) => item.manual);
+
+    let noSqlReason = "";
+    if (diffChanges.length > 0 && !result?.sql) {
+        if (hasHiddenDestructive && hasManualChanges) {
+            noSqlReason =
+                "Sebagian perubahan butuh SQL manual dan sisanya bersifat destruktif (DROP). Centang opsi destruktif di atas untuk menyertakan statement DROP, atau buka tab Drafts.";
+        } else if (hasHiddenDestructive) {
+            noSqlReason =
+                "Seluruh perbedaan yang terdeteksi bersifat destruktif (DROP). Centang 'Sertakan statement destruktif' lalu klik Bandingkan Skema lagi bila ingin mengirimnya ke Draft.";
+        } else if (hasManualChanges) {
+            noSqlReason =
+                "Perubahan yang terdeteksi butuh penulisan manual (misalnya kolom IDENTITY atau tipe constraint khusus). Buka tab Drafts untuk menulis atau menyusunnya via GUI.";
+        }
+    }
 
     return (
         <div className="stack">
@@ -199,9 +228,15 @@ export function DiffPage() {
                                 <input
                                     type="checkbox"
                                     checked={allowDestructive}
-                                    onChange={(e) => setAllowDestructive(e.target.checked)}
+                                    onChange={(e) => {
+                                        const next = e.target.checked;
+                                        setAllowDestructive(next);
+                                        if (result !== null && sourceId && !isComparing) {
+                                            void runComparison(next);
+                                        }
+                                    }}
                                 />
-                                Sertakan statement destruktif (DROP TABLE / DROP COLUMN)
+                                Sertakan statement destruktif ke Gabungan SQL (DROP TABLE / DROP COLUMN)
                             </label>
                         </div>
 
@@ -222,12 +257,25 @@ export function DiffPage() {
                             </p>
                         </div>
 
-                        {result.sql && (
+                        {result.sql && canEdit ? (
                             <button type="button" className="primary" onClick={sendSqlToDraft}>
                                 Kirim SQL ke Draft Migration
                             </button>
+                        ) : (
+                            canEdit &&
+                            diffChanges.length > 0 && (
+                                <Link className="btn" to={`/databases/${id}/migrations`}>
+                                    Buka Tab Drafts
+                                </Link>
+                            )
                         )}
                     </div>
+
+                    {noSqlReason && (
+                        <p className="alert warning" role="status">
+                            {noSqlReason}
+                        </p>
+                    )}
 
                     {result.manual && (
                         <p className="alert warning" role="alert">
@@ -258,10 +306,25 @@ export function DiffPage() {
                                                 <td>{ch.description}</td>
                                                 <td>
                                                     {ch.destructive && (
-                                                        <span className="badge danger">
-                                                            Destructive
-                                                        </span>
-                                                    )}{" "}
+                                                        <>
+                                                            <span className="badge danger">
+                                                                Destructive
+                                                            </span>{" "}
+                                                            {!ch.manual && (
+                                                                <span
+                                                                    className={
+                                                                        resultAllowDestructive
+                                                                            ? "badge info"
+                                                                            : "badge"
+                                                                    }
+                                                                >
+                                                                    {resultAllowDestructive
+                                                                        ? "Masuk SQL"
+                                                                        : "Dilewati"}
+                                                                </span>
+                                                            )}{" "}
+                                                        </>
+                                                    )}
                                                     {ch.manual && (
                                                         <span className="badge warning">Manual</span>
                                                     )}
@@ -278,6 +341,19 @@ export function DiffPage() {
                             {result.sql && (
                                 <div>
                                     <h3>Gabungan SQL Migration</h3>
+                                    {skippedDestructiveCount > 0 ? (
+                                        <p className="muted">
+                                            {skippedDestructiveCount} statement destruktif (DROP)
+                                            dilewati karena opsi destruktif belum dicentang.
+                                        </p>
+                                    ) : (
+                                        includedDestructiveCount > 0 && (
+                                            <p className="muted">
+                                                Termasuk {includedDestructiveCount} statement
+                                                destruktif (DROP) sesuai opsi yang dicentang.
+                                            </p>
+                                        )
+                                    )}
                                     <pre className="sql-preview">{result.sql}</pre>
                                 </div>
                             )}

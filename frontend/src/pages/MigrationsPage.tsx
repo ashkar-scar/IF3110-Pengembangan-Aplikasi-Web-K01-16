@@ -272,6 +272,7 @@ export function MigrationsPage() {
                         )}
                         {activeTab === "drafts" && (
                             <DraftsPanel
+                                key={initialSql}
                                 targetId={targetId}
                                 driver={target?.driver ?? "postgres"}
                                 schemaSnapshot={schemaSnapshot}
