@@ -133,8 +133,52 @@ func (conn *Connection) Version(ctx context.Context) (int64, error) {
 	return version, err
 }
 
+var ErrInvalidPostgresIdentifier = errors.New("identifier PostgreSQL tidak valid")
+
+// Menyaring ulang identifier dari daftar karakter aman supaya bebas karakter injeksi.
+func SanitizePostgresIdentifier(raw string) (string, error) {
+	const firstChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+	const restChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+	if len(raw) == 0 || len(raw) > 63 {
+		return "", ErrInvalidPostgresIdentifier
+	}
+
+	out := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		charset := restChars
+		if i == 0 {
+			charset = firstChars
+		}
+		matched := false
+		for j := 0; j < len(charset); j++ {
+			if raw[i] == charset[j] {
+				out = append(out, charset[j])
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return "", ErrInvalidPostgresIdentifier
+		}
+	}
+	return string(out), nil
+}
+
 // Membuat database PostgreSQL baru jika belum tersedia melalui database postgres.
 func EnsurePostgresDatabase(ctx context.Context, adminConfig Config, adminPassword, targetDatabase, ownerUsername string) error {
+	safeDB, err := SanitizePostgresIdentifier(targetDatabase)
+	if err != nil {
+		return err
+	}
+
+	var safeOwner string
+	if ownerUsername != "" {
+		safeOwner, err = SanitizePostgresIdentifier(ownerUsername)
+		if err != nil {
+			return err
+		}
+	}
+
 	maintenance := adminConfig
 	maintenance.Database = "postgres"
 	conn, err := OpenPostgres(ctx, maintenance, adminPassword)
@@ -144,16 +188,16 @@ func EnsurePostgresDatabase(ctx context.Context, adminConfig Config, adminPasswo
 	defer conn.Close()
 
 	var exists bool
-	if err := conn.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", targetDatabase).Scan(&exists); err != nil {
+	if err := conn.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", safeDB).Scan(&exists); err != nil {
 		return err
 	}
 	if exists {
 		return nil
 	}
 
-	query := "CREATE DATABASE " + Quote(targetDatabase)
-	if ownerUsername != "" {
-		query += " OWNER " + Quote(ownerUsername)
+	query := `CREATE DATABASE "` + safeDB + `"`
+	if safeOwner != "" {
+		query += ` OWNER "` + safeOwner + `"`
 	}
 	if _, err := conn.DB.ExecContext(ctx, query); err != nil {
 		var pgErr *pgconn.PgError

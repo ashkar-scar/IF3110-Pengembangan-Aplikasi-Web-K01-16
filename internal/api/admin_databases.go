@@ -215,8 +215,8 @@ func ensurePostgresDatabase(ctx context.Context, target core.DatabaseTarget, cre
 }
 
 func postgresCreateError(w http.ResponseWriter, err error) {
-	if errors.Is(err, errInvalidNewDatabase) {
-		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Nama database baru tidak valid atau memakai database sistem/platform")
+	if errors.Is(err, errInvalidNewDatabase) || errors.Is(err, targetdb.ErrInvalidPostgresIdentifier) {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Nama database atau owner hanya boleh huruf, angka, garis bawah (_), tanda hubung (-), dan bukan database sistem/platform")
 		return
 	}
 	var pgErr *pgconn.PgError
