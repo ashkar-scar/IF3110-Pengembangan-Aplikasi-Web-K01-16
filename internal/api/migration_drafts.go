@@ -8,7 +8,9 @@ import (
 
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/sqlguard"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 )
 
 type draftRequest struct {
@@ -224,6 +226,38 @@ func validateDraftRequest(request *draftRequest) (string, bool) {
 	return "", true
 }
 
+func validateDraftSQL(driver string, request draftRequest) (string, bool) {
+	if request.ExecutionMode == core.ExecutionBatch {
+		if _, err := targetdb.ParseBatch(request.SQLUp, request.SQLDown, request.BatchColumn, request.IsIrreversible); err != nil {
+			return err.Error(), false
+		}
+		return "", true
+	}
+
+	checkStatement := func(label, sqlText string) (string, bool) {
+		if driver == "postgres" {
+			if _, err := sqlguard.PostgresMigration(sqlText); err != nil {
+				return label + ": " + err.Error(), false
+			}
+			return "", true
+		}
+		if _, err := sqlguard.Migration(sqlText); err != nil {
+			return label + ": " + err.Error(), false
+		}
+		return "", true
+	}
+
+	if message, valid := checkStatement("SQL up", request.SQLUp); !valid {
+		return message, false
+	}
+	if !request.IsIrreversible {
+		if message, valid := checkStatement("SQL down", request.SQLDown); !valid {
+			return message, false
+		}
+	}
+	return "", true
+}
+
 // draftFromRequest mengubah payload JSON menjadi model draft dengan data aman dari backend
 func draftFromRequest(request draftRequest, targetID, actorID int64) core.Draft {
 	return core.Draft{
@@ -272,6 +306,10 @@ func (a *API) createMigrationDraft(w http.ResponseWriter, r *http.Request, sessi
 	}
 
 	if message, valid := validateDraftRequest(&request); !valid {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", message)
+		return
+	}
+	if message, valid := validateDraftSQL(target.Driver, request); !valid {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", message)
 		return
 	}
@@ -335,6 +373,10 @@ func (a *API) updateMigrationDraft(w http.ResponseWriter, r *http.Request, sessi
 	}
 
 	if message, valid := validateDraftRequest(&request); !valid {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", message)
+		return
+	}
+	if message, valid := validateDraftSQL(target.Driver, request); !valid {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", message)
 		return
 	}
