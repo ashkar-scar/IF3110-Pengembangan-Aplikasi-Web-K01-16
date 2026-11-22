@@ -32,6 +32,9 @@ func (a *API) migrationEnqueueRoutes(mux *http.ServeMux) {
 
 // enqueueMigrationReview memvalidasi request lalu mengirimkannya ke queue worker.
 func (a *API) enqueueMigrationReview(w http.ResponseWriter, r *http.Request, session auth.AuthenticationResult) {
+	if !jobJSONRequest(w, r) {
+		return
+	}
 	target, ok := a.allowedTarget(w, r, session.User, core.PermissionEdit)
 	if !ok {
 		return
@@ -73,13 +76,7 @@ func (a *API) enqueueMigrationReview(w http.ResponseWriter, r *http.Request, ses
 
 	if err != nil {
 		log.Printf("Gagal enqueue migration request %d: %v", request.ID, err)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Migration request tidak dapat dimasukkan ke queue")
-		return
-	}
-
-	if err = a.migrations.MarkRequestEnqueued(r.Context(), target.ID, request.ID); err != nil {
-		log.Printf("Job %s dibuat tetapi status request %d gagal diperbarui: %v", jobID, request.ID, err)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Job dibuat tetapi status request belum tersinkronisasi")
+		jobError(w, err)
 		return
 	}
 

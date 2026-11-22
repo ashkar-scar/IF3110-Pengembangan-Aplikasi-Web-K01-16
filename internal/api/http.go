@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/queue"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"log"
@@ -21,7 +22,11 @@ type API struct {
 	registry      AdminDatabaseSource
 	migrations    *store.MigrationRepository
 	jobEnqueuer   queue.JobEnqueuer
+	jobs          JobSource
+	metrics       *observability.Metrics
 }
+
+func (a *API) UseMetrics(metrics *observability.Metrics) { a.metrics = metrics }
 
 // Bikin objek API baru dengan service yang dibutuhkan
 func Create(authService *auth.Service, secureCookies bool) *API {
@@ -48,6 +53,7 @@ func (a *API) Router() http.Handler {
 	a.migrationDraftRoutes(mux)
 	a.migrationHistoryRoutes(mux)
 	a.migrationEnqueueRoutes(mux)
+	a.jobRoutes(mux)
 	a.webRoutes(mux)
 	return mux
 }

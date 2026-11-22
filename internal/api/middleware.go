@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 )
@@ -110,7 +111,7 @@ func (a *API) authenticated(next authenticatedHandler) http.HandlerFunc {
 			a.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
 		}
 
-		next(w, r, result)
+		next(w, r.WithContext(observability.WithFields(r.Context(),"actor_id",result.User.ID,"actor_name",result.User.Username)), result)
 	}
 }
 

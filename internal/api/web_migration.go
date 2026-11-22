@@ -15,7 +15,6 @@ import (
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 )
 
 const reconcileGrace = 2 * time.Minute
@@ -139,6 +138,10 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 	}
 
 	action := r.FormValue("action")
+	if action == "run" {
+		a.showError(w, http.StatusConflict, session, "Eksekusi wajib melalui review, approval, dan job queue pada API Milestone 2.")
+		return
+	}
 	if action != "save" && action != "run" && action != "plan" {
 		page.Error = "Aksi migration tidak valid."
 		render(w, http.StatusUnprocessableEntity, "migrations", page)
@@ -165,25 +168,7 @@ func (a *API) submitMigration(w http.ResponseWriter, r *http.Request, session au
 		return
 	}
 
-	if action != "run" {
-		redirectToMigrations(w, r, target, fmt.Sprintf("draft=%d&saved=1", draft.ID))
-		return
-	}
-
-	attempt, err := a.runDraft(r.Context(), target, draft, session.User)
-	if err != nil {
-		page.Draft = draft
-		page.Error = err.Error()
-		render(w, http.StatusUnprocessableEntity, "migrations", page)
-		return
-	}
-
-	if attempt.Status == core.AttemptSuccess {
-		redirectToMigrations(w, r, target, "attempt="+attempt.ID)
-		return
-	}
-
-	redirectToMigrations(w, r, target, fmt.Sprintf("draft=%d&attempt=%s", draft.ID, attempt.ID))
+	redirectToMigrations(w, r, target, fmt.Sprintf("draft=%d&saved=1", draft.ID))
 }
 
 // Rekonsiliasi manual untuk attempt UNKNOWN atau RUNNING yang tertinggal.
@@ -196,6 +181,10 @@ func (a *API) reconcileAttempt(w http.ResponseWriter, r *http.Request, session a
 	attempt, err := a.migrations.GetAttempt(r.Context(), target.ID, r.PathValue("attempt"))
 	if err != nil {
 		a.showError(w, http.StatusNotFound, session, "Riwayat migration tidak ditemukan.")
+		return
+	}
+	if attempt.JobID != nil {
+		a.showError(w, http.StatusConflict, session, "Rekonsiliasi job M2 dilakukan worker melalui endpoint retry.")
 		return
 	}
 
@@ -262,60 +251,6 @@ func (a *API) saveDraft(ctx context.Context, target Target, draft core.Draft) (c
 	}
 
 	return draft, nil
-}
-
-// Catat attempt RUNNING secara idempoten lalu jalankan SQL ke target.
-func (a *API) runDraft(ctx context.Context, target Target, draft core.Draft, user core.User) (core.Attempt, error) {
-	attempt, fingerprint, created, err := a.migrations.BeginAttempt(
-		ctx,
-		target.ID,
-		draft.ID,
-		draft.Revision,
-		newAttemptID(),
-		user,
-	)
-	if errors.Is(err, store.ErrDraftConflict) {
-		return attempt, errors.New("Revisi draft sudah berubah. Buka ulang draft.")
-	}
-	if err != nil {
-		log.Printf("Gagal mencatat attempt: %v", err)
-		return attempt, errors.New("Migration tidak dapat dimulai.")
-	}
-
-	// Submit ulang pada revisi sama mengembalikan attempt lama tanpa eksekusi ulang.
-	if !created {
-		return attempt, nil
-	}
-
-	execCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	conn, err := a.open(execCtx, target)
-	if err != nil {
-		log.Printf("Database target tidak dapat diakses: %v", err)
-		return a.finish(attempt.ID, core.AttemptFailed, nil, "Database target tidak dapat diakses")
-	}
-	defer conn.Close()
-
-	version, err := conn.Execute(execCtx, targetdb.Execution{
-		ID:          attempt.ID,
-		SQL:         attempt.SQL,
-		ActorID:     attempt.ActorID,
-		ActorName:   attempt.ActorName,
-		BaseVersion: attempt.BaseVersion,
-		Fingerprint: fingerprint,
-	})
-	switch {
-	case err == nil:
-		return a.finish(attempt.ID, core.AttemptSuccess, &version, "")
-	case errors.Is(err, targetdb.ErrUnknown):
-		return a.finish(attempt.ID, core.AttemptUnknown, nil, err.Error())
-	case errors.Is(err, targetdb.ErrVersion), errors.Is(err, targetdb.ErrDrift), strings.HasPrefix(err.Error(), "statement "):
-		return a.finish(attempt.ID, core.AttemptFailed, nil, err.Error())
-	default:
-		log.Printf("Migration %s gagal: %v", attempt.ID, err)
-		return a.finish(attempt.ID, core.AttemptFailed, nil, "Migration gagal; seluruh perubahan dibatalkan")
-	}
 }
 
 // Simpan status akhir attempt dengan context baru agar tahan pembatalan request.

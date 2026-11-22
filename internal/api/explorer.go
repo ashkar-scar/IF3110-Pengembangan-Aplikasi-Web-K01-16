@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"log"
 	"net/http"
 	"net/url"
@@ -77,7 +78,7 @@ func (a *API) signedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 		if result.NewSessionToken != "" {
 			a.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
 		}
-		next(w, r, result)
+		next(w, r.WithContext(observability.WithFields(r.Context(), "actor_id", result.User.ID, "actor_name", result.User.Username)), result)
 	}
 }
 
@@ -104,18 +105,26 @@ func (a *API) allowedTarget(w http.ResponseWriter, r *http.Request, user core.Us
 		writeError(w, http.StatusForbidden, "FORBIDDEN", "Anda tidak memiliki akses ke database ini")
 		return Target{}, false
 	}
+	*r = *r.WithContext(observability.WithFields(r.Context(), "target_id", target.ID, "database", target.Name))
 	return target, true
 }
 
 // Buka koneksi target sesuai driver-nya.
 func (a *API) open(ctx context.Context, target Target) (*targetdb.Connection, error) {
+	var conn *targetdb.Connection
+	var err error
 	switch target.Driver {
 	case "postgres":
-		return targetdb.OpenPostgres(ctx, target.Config, target.Password)
+		conn, err = targetdb.OpenPostgres(ctx, target.Config, target.Password)
 	case "sqlite":
-		return targetdb.OpenSQLite(ctx, a.dataDir, target.Config.Database)
+		conn, err = targetdb.OpenSQLite(ctx, a.dataDir, target.Config.Database)
+	default:
+		return nil, errors.New("driver tidak dikenal")
 	}
-	return nil, errors.New("driver tidak dikenal")
+	if err == nil {
+		conn.ObservePool(a.metrics)
+	}
+	return conn, err
 }
 
 // Log error koneksi lalu balas 503 yang aman ke klien.

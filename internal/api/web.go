@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"html/template"
 	"io/fs"
 	"log"
@@ -99,7 +100,7 @@ func (a *API) loggedIn(next func(http.ResponseWriter, *http.Request, auth.Authen
 			return
 		}
 
-		next(w, r, session)
+		next(w, r.WithContext(observability.WithFields(r.Context(), "actor_id", session.User.ID, "actor_name", session.User.Username)), session)
 	}
 }
 
@@ -125,7 +126,7 @@ func (a *API) pageSession(w http.ResponseWriter, r *http.Request) (auth.Authenti
 	if session.NewSessionToken != "" {
 		a.setSessionCookie(w, session.NewSessionToken, session.Session.AbsoluteExpiresAt)
 	}
-	
+
 	return session, true
 }
 

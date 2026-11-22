@@ -124,9 +124,10 @@ func TestMigrationFixtureCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		redirectQuery(t, f.submit(editorID, newDraft("cleanup fixture", "SELECT 1", "run")))
-		if len(f.history(t)) != 1 {
-			t.Fatal("expected persisted attempt before cleanup")
+		redirectQuery(t, f.submit(editorID, newDraft("cleanup fixture", "SELECT 1", "save")))
+		drafts, err := f.api.migrations.ListDrafts(context.Background(), f.targetID)
+		if err != nil || len(drafts) != 1 {
+			t.Fatal("expected persisted draft before cleanup")
 		}
 	})
 
@@ -224,97 +225,30 @@ func (f migrationFixture) version(t *testing.T) int64 {
 }
 
 // Uji alur simpan, edit, eksekusi, kirim ulang idempoten, dan kunci draft.
-func TestSaveEditAndRunMigration(t *testing.T) {
+func TestLegacyMigrationFormSavesButRequiresApprovalToRun(t *testing.T) {
 	f := migrationAPI(t)
-
-	saveForm := newDraft("Tambah tabel produk", "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)", "save")
-	query := redirectQuery(t, f.submit(editorID, saveForm))
-	if query.Get("saved") != "1" {
-		t.Fatalf("unexpected redirect: %v", query)
-	}
-	expectPage(t, f.get(editorID, "draft="+query.Get("draft")+"&saved=1"), http.StatusOK, "Draft disimpan", "Revisi 1", "CREATE TABLE products")
-
-	runForm := newDraft(
-		"Tambah tabel produk",
-		"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO products VALUES (1, 'Buku')",
-		"run",
-	)
-	runForm.Set("draft_id", query.Get("draft"))
-	runForm.Set("revision", "1")
-	query = redirectQuery(t, f.submit(editorID, runForm))
-	if query.Get("draft") != "" || query.Get("attempt") == "" {
-		t.Fatalf("successful run must clear the editor and show the attempt: %v", query)
-	}
-	expectPage(t, f.get(editorID, "attempt="+query.Get("attempt")), http.StatusOK, "berhasil", "versi 2", "SUCCESS")
-
-	history := f.history(t)
-	if len(history) != 1 {
-		t.Fatalf("got %d history entries, want 1", len(history))
-	}
-	if history[0].Revision != 2 || history[0].ActorID != editorID || f.version(t) != 2 {
-		t.Fatalf("unexpected history or version: %+v, target version=%d", history[0], f.version(t))
-	}
-	expectPage(t, page(f.api.explorerPage, viewerID, fmt.Sprintf("/databases/%d?table=products", f.targetID)), http.StatusOK, "<td>Buku</td>")
-
-	// Tombol yang ditekan dua kali mengirim form yang sama. Hasilnya attempt yang sama, bukan eksekusi kedua
-	runForm.Set("revision", "2")
-	again := redirectQuery(t, f.submit(editorID, runForm))
-	if again.Get("attempt") != query.Get("attempt") || len(f.history(t)) != 1 || f.version(t) != 2 {
-		t.Fatalf("repeating the same submission must not run the migration twice: %v", again)
-	}
-
-	runForm.Set("sql", "DROP TABLE products")
-	expectPage(t, f.submit(editorID, runForm), http.StatusUnprocessableEntity, "sudah dijalankan")
-}
-
-// Pastikan migration gagal di-rollback dan draft tetap bisa diperbaiki lagi.
-func TestFailedMigrationIsRolledBackAndCanBeFixed(t *testing.T) {
-	f := migrationAPI(t)
-
-	form := newDraft("Migration gagal", "ALTER TABLE customers ADD COLUMN phone TEXT; INSERT INTO missing VALUES (1)", "run")
+	form := newDraft("Tambah tabel produk", "CREATE TABLE products(id INTEGER PRIMARY KEY)", "save")
 	query := redirectQuery(t, f.submit(editorID, form))
-	if query.Get("draft") == "" {
-		t.Fatal("failed draft must stay open in the editor")
+	if query.Get("saved") != "1" {
+		t.Fatal(query)
 	}
-	expectPage(t, f.get(editorID, query.Encode()), http.StatusOK, "gagal: statement 2 gagal", "FAILED", "ALTER TABLE customers")
-
-	if f.version(t) != 1 {
-		t.Fatalf("failed migration changed target version to %d, want 1", f.version(t))
-	}
-	expectPage(t, page(f.api.explorerPage, viewerID, fmt.Sprintf("/databases/%d?table=customers&view=columns", f.targetID)), http.StatusOK)
-
 	form.Set("draft_id", query.Get("draft"))
 	form.Set("revision", "1")
-	form.Set("sql", "ALTER TABLE customers ADD COLUMN phone TEXT")
+	form.Set("sql", "CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT)")
 	redirectQuery(t, f.submit(editorID, form))
-
-	history := f.history(t)
-	if len(history) != 2 || history[0].Status != core.AttemptSuccess || f.version(t) != 2 {
-		t.Fatalf("fixed draft must run as a new revision: %+v, version=%d", history, f.version(t))
+	form.Set("action", "run")
+	expectPage(t, f.submit(editorID, form), http.StatusConflict, "review, approval, dan job queue")
+	if len(f.history(t)) != 0 || f.version(t) != 1 {
+		t.Fatal("legacy form bypassed queue")
 	}
 }
 
-// Pastikan draft kedua dengan base version lama gagal saat target sudah maju.
-func TestStaleDraftFailsWithVersionConflict(t *testing.T) {
+func TestLegacyMigrationRunDoesNotCreateDraftOrExecuteSQL(t *testing.T) {
 	f := migrationAPI(t)
-	first := newDraft("Draft pertama", "CREATE TABLE a (id INTEGER)", "save")
-	second := newDraft("Draft kedua", "CREATE TABLE b (id INTEGER)", "save")
-	first.Set("draft_id", redirectQuery(t, f.submit(editorID, first)).Get("draft"))
-	second.Set("draft_id", redirectQuery(t, f.submit(editorID, second)).Get("draft"))
-
-	// Kedua draft disimpan saat database di versi 1. Setelah draft pertama berjalan, draft kedua sudah basi.
-	for _, form := range []url.Values{first, second} {
-		form.Set("revision", "1")
-		form.Set("action", "run")
-		redirectQuery(t, f.submit(editorID, form))
-	}
-
-	history := f.history(t)
-	if len(history) != 2 {
-		t.Fatalf("got %d attempts, want 2", len(history))
-	}
-	if history[0].Status != core.AttemptFailed || !strings.Contains(history[0].Error, "versi database telah berubah") {
-		t.Fatalf("second draft must fail because it was based on version 1: %+v", history[0])
+	expectPage(t, f.submit(editorID, newDraft("Dilarang", "DROP TABLE customers", "run")), http.StatusConflict)
+	drafts, err := f.api.migrations.ListDrafts(context.Background(), f.targetID)
+	if err != nil || len(drafts) != 0 || len(f.history(t)) != 0 || f.version(t) != 1 {
+		t.Fatalf("side effect: %v %v", drafts, err)
 	}
 }
 
