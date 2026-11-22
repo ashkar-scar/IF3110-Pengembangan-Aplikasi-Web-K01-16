@@ -46,6 +46,7 @@ func (a *API) Router() http.Handler {
 	a.explorerRoutes(mux)
 	a.migrationToolRoutes(mux)
 	a.migrationDraftRoutes(mux)
+	a.migrationHistoryRoutes(mux)
 	a.migrationEnqueueRoutes(mux)
 	a.webRoutes(mux)
 	return mux
