@@ -53,6 +53,13 @@ func (conn *Connection) Execute(ctx context.Context, execution Execution) (int64
 	if err != nil {
 		return 0, err
 	}
+	var postgresStatements []sqlguard.PostgresStatement
+	if conn.Driver == "postgres" {
+		postgresStatements, err = sqlguard.PostgresMigration(execution.SQL)
+		if err != nil {
+			return 0, err
+		}
+	}
 
 	tx, err := conn.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -106,7 +113,11 @@ func (conn *Connection) Execute(ctx context.Context, execution Execution) (int64
 	}
 
 	for index, statement := range statements {
-		_, err = tx.ExecContext(ctx, statement.SQL)
+		if conn.Driver == "postgres" {
+			_, err = executePostgresStatement(ctx, tx, postgresStatements[index])
+		} else {
+			_, err = tx.ExecContext(ctx, statement.SQL)
+		}
 		if err != nil {
 			return 0, statementError(index+1, err)
 		}

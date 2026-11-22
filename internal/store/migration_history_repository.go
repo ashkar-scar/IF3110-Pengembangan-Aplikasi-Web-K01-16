@@ -2,35 +2,27 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
-	"github.com/jackc/pgx/v5"
 )
 
 // ListHistory migration_attempts, mengurutkannya dari terbaru, dan menangani pagination dengan opsi buat menyembunyikan pasangan rollback sukses.
 func (repository *MigrationRepository) ListHistory(ctx context.Context, targetID int64, hideRollback bool, offset int) ([]core.Attempt, error) {
 	query := `
-		SELECT ` + attemptColumns + `
-		FROM migration_attempts AS a
-		WHERE a.target_id = $1
-			AND ($2 = FALSE OR (
-				NOT (a.status = 'SUCCESS' AND a.action_type = 'ROLLBACK')
-				AND NOT EXISTS (
-					SELECT 1
-					FROM migration_attempts AS rollback_attempt
-					WHERE rollback_attempt.target_id = a.target_id
-						AND rollback_attempt.status = 'SUCCESS'
-						AND rollback_attempt.action_type = 'ROLLBACK'
-						AND rollback_attempt.reverts_execution_id = a.id
-				)
-			)
-		)
-			
-		ORDER BY a.started_at DESC, a.id DESC
-		LIMIT $3 OFFSET $4
-	`
+        WITH rollback_pairs AS (
+            SELECT r.id AS rollback_id, e.id AS execution_id
+            FROM migration_attempts r
+            JOIN migration_attempts e ON e.id=r.reverts_execution_id AND e.target_id=r.target_id
+            WHERE r.target_id=$1 AND r.status='SUCCESS' AND r.action_type='ROLLBACK'
+                AND e.status='SUCCESS' AND r.batch_no IS NOT DISTINCT FROM e.batch_no
+        )
+        SELECT ` + attemptColumns + ` FROM migration_attempts a
+        WHERE a.target_id=$1 AND ($2=FALSE OR NOT EXISTS(
+            SELECT 1 FROM rollback_pairs p WHERE p.execution_id=a.id OR p.rollback_id=a.id
+        ))
+        ORDER BY a.started_at DESC,a.id DESC LIMIT $3 OFFSET $4
+    `
 	rows, err := repository.database.Query(ctx, query, targetID, hideRollback, AttemptsPerPage+1, max(offset, 0))
 	if err != nil {
 		return nil, fmt.Errorf("Gagal membaca migration history: %w", err)
@@ -50,63 +42,60 @@ func (repository *MigrationRepository) ListHistory(ctx context.Context, targetID
 	return attempts, rows.Err()
 }
 
-// HistoryActions mencari execution sukses terakhir yang dapat di-rollback atau di-forward.
 func (repository *MigrationRepository) HistoryActions(ctx context.Context, targetID int64) (canRollback, canForward *string, err error) {
-	const activeQuery = `
-		SELECT a.id, COALESCE(mr.is_irreversible, d.is_irreversible)
-		FROM migration_attempts AS a
-		JOIN migration_drafts AS d ON d.id = a.draft_id
-		LEFT JOIN migration_requests AS mr ON mr.id = a.request_id
-		WHERE a.target_id = $1
-			AND a.status = 'SUCCESS'
-			AND a.action_type IN ('UP', 'FORWARD')
-			AND NOT EXISTS (
-				SELECT 1 FROM migration_attempts AS rollback_attempt
-				WHERE rollback_attempt.target_id = a.target_id
-				AND rollback_attempt.status = 'SUCCESS'
-				AND rollback_attempt.action_type = 'ROLLBACK'
-				AND rollback_attempt.reverts_execution_id = a.id
-			)
-
-		ORDER BY COALESCE(a.version, 0) DESC, a.started_at DESC, a.id DESC
-		LIMIT 1
-	`
-	var activeID string
-	var irreversible bool
-	
-	err = repository.database.QueryRow(ctx, activeQuery, targetID).Scan(&activeID, &irreversible)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil, fmt.Errorf("Gagal menentukan rollback: %w", err)
-	}
-
-	if err == nil && !irreversible {
-		canRollback = &activeID
-	}
-
-	const latestSuccessQuery = `
-		SELECT action_type, reverts_execution_id
-		FROM migration_attempts
-		WHERE target_id = $1
-			AND status = 'SUCCESS'
-			AND action_type IN ('UP', 'ROLLBACK', 'FORWARD')
-		ORDER BY started_at DESC, id DESC
-		LIMIT 1
-	`
-	var action core.MigrationAction
-	var revertsID *string
-	
-	err = repository.database.QueryRow(ctx, latestSuccessQuery, targetID).Scan(&action, &revertsID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return canRollback, nil, nil
-	}
-	
+	rows, err := repository.database.Query(ctx, `SELECT a.id,a.action_type,COALESCE(a.reverts_execution_id,''),
+    COALESCE(r.is_irreversible,d.is_irreversible) FROM migration_attempts a
+    JOIN migration_drafts d ON d.id=a.draft_id LEFT JOIN migration_requests r ON r.id=a.request_id
+    WHERE a.target_id=$1 AND a.status='SUCCESS' AND a.batch_no IS NULL
+    ORDER BY a.started_at,a.id`, targetID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Gagal menentukan forward: %w", err)
+		return nil, nil, err
 	}
-	
-	if action == core.ActionRollback && revertsID != nil {
-		canForward = revertsID
+	defer rows.Close()
+	type execution struct {
+		id           string
+		irreversible bool
 	}
-	
+	active := []execution{}
+	undone := []execution{}
+	for rows.Next() {
+		var e execution
+		var action core.MigrationAction
+		var reverts string
+		if err = rows.Scan(&e.id, &action, &reverts, &e.irreversible); err != nil {
+			return nil, nil, err
+		}
+		switch action {
+		case core.ActionUp:
+			active = append(active, e)
+			undone = nil
+		case core.ActionRollback:
+			if len(active) > 0 && active[len(active)-1].id == reverts {
+				undone = append(undone, active[len(active)-1])
+				active = active[:len(active)-1]
+			}
+		case core.ActionForward:
+			if len(undone) > 0 && undone[len(undone)-1].id == reverts {
+				undone = undone[:len(undone)-1]
+				active = append(active, e)
+			}
+		case core.ActionCancelBatch:
+			if len(active) > 0 && active[len(active)-1].id == reverts {
+				active = active[:len(active)-1]
+				undone = nil
+			}
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if len(active) > 0 && !active[len(active)-1].irreversible {
+		id := active[len(active)-1].id
+		canRollback = &id
+	}
+	if len(undone) > 0 {
+		id := undone[len(undone)-1].id
+		canForward = &id
+	}
 	return canRollback, canForward, nil
 }

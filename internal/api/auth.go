@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"log"
 	"net/http"
 	"time"
@@ -72,6 +73,7 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Token session asli hanya dikirim melalui cookie
+	r = r.WithContext(observability.WithFields(r.Context(), "actor_id", result.User.ID, "actor_name", result.User.Username))
 	api.setSessionCookie(w, result.SessionToken, result.ExpiresAt)
 
 	// Response hanya berisi user dan CSRF token
@@ -87,7 +89,7 @@ func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "INVALID_CSRF", "Origin request tidak valid")
 		return
 	}
-	
+
 	// Ambil token session dari cookie
 	cookie, err := r.Cookie(SESSION_COOKIE_NAME)
 	if err != nil {
@@ -110,6 +112,7 @@ func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cocokkan CSRF token dari header dengan session
+	r = r.WithContext(observability.WithFields(r.Context(), "actor_id", result.User.ID, "actor_name", result.User.Username))
 	csrfToken := r.Header.Get("X-CSRF-Token")
 	if csrfToken == "" || csrfToken != result.Session.CSRFToken {
 		// Simpan token baru jika Authenticate melakukan rotasi
@@ -162,6 +165,7 @@ func (api *API) currentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perbarui cookie jika token dirotasi
+	r = r.WithContext(observability.WithFields(r.Context(), "actor_id", result.User.ID, "actor_name", result.User.Username))
 	if result.NewSessionToken != "" {
 		api.setSessionCookie(w, result.NewSessionToken, result.Session.AbsoluteExpiresAt)
 	}

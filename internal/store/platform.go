@@ -9,6 +9,9 @@ import (
 //go:embed platform_schema.sql
 var PlatformSchema string
 
+//go:embed queue_schema.sql
+var QueueSchema string
+
 // Menyiapkan seluruh tabel platform dan migration dalam satu transaksi
 func SetupPlatform(ctx context.Context, pool *pgxpool.Pool) error {
 	// Transaksi mencegah schema terpasang sebagian ketika terjadi kegagalan
@@ -27,6 +30,9 @@ func SetupPlatform(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// Buat tabel draft dan riwayat percobaan migration
 	if _, err = tx.Exec(ctx, MigrationSchema); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, QueueSchema); err != nil {
 		return err
 	}
 

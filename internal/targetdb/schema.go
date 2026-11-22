@@ -118,7 +118,7 @@ func (conn *Connection) snapshot(ctx context.Context, queryer rowsQueryer) (Snap
 	const schemasQuery = `
 		SELECT nspname
 		FROM pg_namespace
-		WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+		WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'ruangdb_internal')
 		  AND nspname NOT LIKE 'pg_toast%'
 		  AND nspname NOT LIKE 'pg_temp%'
 		ORDER BY nspname
@@ -149,7 +149,7 @@ func (conn *Connection) snapshot(ctx context.Context, queryer rowsQueryer) (Snap
 		JOIN pg_namespace AS n
 			ON n.oid = t.relnamespace
 		WHERE t.relkind IN ('r', 'p')
-		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'ruangdb_internal')
 		  AND n.nspname NOT LIKE 'pg_toast%'
 		  AND n.nspname NOT LIKE 'pg_temp%'
 		  AND t.relname <> 'schema_migrations'

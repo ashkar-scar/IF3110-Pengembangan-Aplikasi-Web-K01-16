@@ -28,7 +28,7 @@ func (repository *MigrationRepository) GetApprovedRequest(ctx context.Context, t
 		return request, fmt.Errorf("Gagal membaca request untuk enqueue: %w", err)
 	}
 
-	if request.Status != core.RequestApproved {
+	if request.Status != core.RequestApproved && request.Status != core.RequestEnqueued {
 		return request, ErrRequestNotApproved
 	}
 

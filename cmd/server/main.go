@@ -3,16 +3,31 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/api"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/queue"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/api"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
-	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	shutdownTelemetry, err := observability.Init(ctx, "ruangdb-api")
+	if err != nil {
+		log.Fatal("Gagal menyiapkan telemetry")
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		shutdownTelemetry(flushCtx)
+	}()
 	// GEt alamat PostgreSQL dari env
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -63,6 +78,12 @@ func main() {
 	app.UseDatabaseRegistry(targetRepository)
 	app.UseTargets(api.NewRegistryTargets(targetRepository, permissionRepository), dataDir)
 	app.UseMigrations(store.NewMigrationRepository(database))
+	app.UseJobs(queue.NewService(queue.NewRepository(database)))
+	metrics := observability.NewMetrics(database)
+	app.UseMetrics(metrics)
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", metrics.Handler())
+	mux.Handle("/", app.Router())
 
 	address := os.Getenv("APP_ADDR")
 	if address == "" {
@@ -72,11 +93,17 @@ func main() {
 	// Create server
 	server := &http.Server{
 		Addr:              address,
-		Handler:           app.Router(),
+		Handler:           observability.HTTP(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	log.Printf("Server listening at %s", server.Addr)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		server.Shutdown(shutdownCtx)
+	}()
 
 	// Jalanin server
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

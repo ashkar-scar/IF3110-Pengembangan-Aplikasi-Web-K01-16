@@ -3,13 +3,16 @@ package targetdb
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Konfigurasi koneksi ke database target (tanpa password).
@@ -23,8 +26,10 @@ type Config struct {
 
 // Pool koneksi ke database target PostgreSQL atau SQLite.
 type Connection struct {
-	DB     *sql.DB
-	Driver string
+	DB            *sql.DB
+	Driver        string
+	closeObserver func()
+	closeOnce     sync.Once
 }
 
 // Buka pool koneksi PostgreSQL target lalu cek konektivitasnya.
@@ -41,10 +46,12 @@ func OpenPostgres(ctx context.Context, config Config, password string) (*Connect
 	query.Set("connect_timeout", "5")
 	connURL.RawQuery = query.Encode()
 
-	db, err := sql.Open("pgx", connURL.String())
+	pgConfig, err := pgx.ParseConfig(connURL.String())
 	if err != nil {
 		return nil, err
 	}
+	pgConfig.Tracer = observability.SQLTracer{Database: "target"}
+	db := stdlib.OpenDB(*pgConfig)
 
 	// Batasi pool per target supaya koneksi ke banyak database tidak cepat habis.
 	db.SetMaxOpenConns(3)
@@ -70,7 +77,18 @@ func Quote(value string) string {
 
 // Tutup pool koneksi target.
 func (conn *Connection) Close() error {
+	conn.closeOnce.Do(func() {
+		if conn.closeObserver != nil {
+			conn.closeObserver()
+		}
+	})
 	return conn.DB.Close()
+}
+
+func (conn *Connection) ObservePool(metrics *observability.Metrics) {
+	if metrics != nil {
+		conn.closeObserver = metrics.Target(fmt.Sprintf("%p", conn), conn.DB)
+	}
 }
 
 type queryer interface {
