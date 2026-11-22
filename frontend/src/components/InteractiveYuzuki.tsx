@@ -1,18 +1,45 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import yuzukiAngry from "../assets/yuzuki-chibi-angry.png";
 import yuzukiClick from "../assets/yuzuki-chibi-click.png";
 import yuzukiDrag from "../assets/yuzuki-chibi-drag.png";
 import yuzukiHover from "../assets/yuzuki-chibi-hover.png";
 import yuzukiIdle from "../assets/yuzuki-chibi.png";
+import yuzukiPout from "../assets/yuzuki-chibi-pout.png";
+import yuzukiSad from "../assets/yuzuki-chibi-sad.png";
 import yuzukiSurprised from "../assets/yuzuki-chibi-surprised.png";
 import yuzukiWink from "../assets/yuzuki-chibi-wink.png";
 
-type YuzukiMood = "idle" | "hover" | "happy" | "wink" | "surprised" | "drag";
-type ClickReaction = "happy" | "wink" | "surprised";
+type YuzukiMood =
+    | "idle"
+    | "hover"
+    | "happy"
+    | "wink"
+    | "surprised"
+    | "pout"
+    | "angry"
+    | "sad"
+    | "drag";
+type ClickReaction = "happy" | "wink" | "surprised" | "pout" | "angry" | "sad";
 
 const CLICK_SEQUENCE: { mood: ClickReaction; line: string }[] = [
     { mood: "happy", line: "Semangat kelola skema!" },
     { mood: "wink", line: "Query aman, siap jalan!" },
     { mood: "surprised", line: "Eh? Ada migrasi baru?!" },
+    { mood: "pout", line: "Hmph, jangan dicolek terus!" },
+    { mood: "angry", line: "Kesal nih, lagi fokus kerja!" },
+    { mood: "sad", line: "Aduh, capek diganggu terus..." },
+];
+
+const SPRITES: { mood: YuzukiMood; src: string }[] = [
+    { mood: "idle", src: yuzukiIdle },
+    { mood: "hover", src: yuzukiHover },
+    { mood: "happy", src: yuzukiClick },
+    { mood: "wink", src: yuzukiWink },
+    { mood: "surprised", src: yuzukiSurprised },
+    { mood: "pout", src: yuzukiPout },
+    { mood: "angry", src: yuzukiAngry },
+    { mood: "sad", src: yuzukiSad },
+    { mood: "drag", src: yuzukiDrag },
 ];
 
 const POSITION_STORAGE_KEY = "dbmanager_yuzuki_pos";
@@ -53,9 +80,10 @@ function loadSavedPosition(): { x: number; y: number } | null {
 
 interface InteractiveYuzukiProps {
     variant: "companion" | "inline";
+    defaultMood?: YuzukiMood;
 }
 
-export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
+export function InteractiveYuzuki({ variant, defaultMood = "idle" }: InteractiveYuzukiProps) {
     const draggable = variant === "companion";
     const [isHovered, setIsHovered] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +96,7 @@ export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const dragRef = useRef<DragState | null>(null);
     const justDraggedRef = useRef(false);
+    const dragCountRef = useRef(0);
     const clickCountRef = useRef(0);
     const timerRef = useRef<number | null>(null);
 
@@ -162,7 +191,12 @@ export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
             );
             setPosition(finalPos);
             window.sessionStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(finalPos));
-            showReaction("surprised", "Posisi baru oke!", 1100);
+            dragCountRef.current += 1;
+            if (dragCountRef.current >= 3) {
+                showReaction("pout", "Pusing diseret terus!", 1200);
+            } else {
+                showReaction("surprised", "Posisi baru oke!", 1100);
+            }
         }
         dragRef.current = null;
     }
@@ -191,7 +225,7 @@ export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
           ? reaction.mood
           : isHovered
             ? "hover"
-            : "idle";
+            : defaultMood;
 
     const bubbleText = isDragging
         ? "Waaah, pelan-pelan!"
@@ -248,48 +282,16 @@ export function InteractiveYuzuki({ variant }: InteractiveYuzukiProps) {
             >
                 {/* Menumpuk semua sprite biar transisi ganti ekspresi instan tanpa kedip load. */}
                 <span className="yuzuki-stage" key={animTick}>
-                    <img
-                        src={yuzukiIdle}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "idle" ? "is-active" : ""}`}
-                    />
-                    <img
-                        src={yuzukiHover}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "hover" ? "is-active" : ""}`}
-                    />
-                    <img
-                        src={yuzukiClick}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "happy" ? "is-active" : ""}`}
-                    />
-                    <img
-                        src={yuzukiWink}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "wink" ? "is-active" : ""}`}
-                    />
-                    <img
-                        src={yuzukiSurprised}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "surprised" ? "is-active" : ""}`}
-                    />
-                    <img
-                        src={yuzukiDrag}
-                        alt=""
-                        aria-hidden="true"
-                        draggable={false}
-                        className={`yuzuki-sprite ${activeMood === "drag" ? "is-active" : ""}`}
-                    />
+                    {SPRITES.map((sprite) => (
+                        <img
+                            key={sprite.mood}
+                            src={sprite.src}
+                            alt=""
+                            aria-hidden="true"
+                            draggable={false}
+                            className={`yuzuki-sprite ${activeMood === sprite.mood ? "is-active" : ""}`}
+                        />
+                    ))}
                 </span>
             </button>
         </div>

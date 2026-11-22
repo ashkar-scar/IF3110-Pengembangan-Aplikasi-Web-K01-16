@@ -113,12 +113,21 @@ export interface MigrationJob {
     completed_batches: number;
     rows_processed: number;
     last_cursor: string;
+    retry_count?: number;
+    max_retries?: number;
+    next_retry_at?: string | null;
     safe_error: string;
     can_retry: boolean;
     can_cancel_batch: boolean;
     checkpoints?: BatchCheckpoint[];
     created_at?: string;
+    started_at?: string | null;
     finished_at?: string | null;
+}
+
+export interface JobListResponse {
+    jobs: MigrationJob[];
+    has_more: boolean;
 }
 
 export interface HistoryAttempt {

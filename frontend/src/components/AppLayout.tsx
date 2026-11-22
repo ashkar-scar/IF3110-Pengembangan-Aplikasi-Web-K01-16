@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import schoolBg from "../assets/anime-school-background.jpg";
 import { useAuth } from "../context/useAuth";
@@ -10,16 +10,10 @@ const WALLPAPER_STORAGE_KEY = "dbmanager_wallpaper";
 export function AppLayout() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    const [menuOpen, setMenuOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [showWallpaper, setShowWallpaper] = useState(() => {
         return window.localStorage.getItem(WALLPAPER_STORAGE_KEY) !== "off";
     });
-    const navId = useId();
-
-    function closeMenu() {
-        setMenuOpen(false);
-    }
 
     function toggleWallpaper() {
         setShowWallpaper((prev) => {
@@ -67,51 +61,74 @@ export function AppLayout() {
             </a>
             <header className="topbar">
                 <div className="topbar-inner">
-                    <NavLink className="brand" to="/databases" onClick={closeMenu}>
+                    <NavLink className="brand" to="/databases">
                         <BrandMark size={24} />
                         <span>DBManager</span>
                     </NavLink>
 
-                    <button
-                        type="button"
-                        className="menu-toggle"
-                        aria-expanded={menuOpen}
-                        aria-controls={navId}
-                        onClick={() => setMenuOpen((prev) => !prev)}
-                    >
-                        {menuOpen ? "Tutup Menu" : "Menu"}
-                    </button>
-
-                    <div id={navId} className={`nav-panel ${menuOpen ? "is-open" : ""}`}>
-                        <nav aria-label="Primary">
+                    <div className="nav-panel">
+                        <nav className="topbar-nav" aria-label="Primary">
                             <ul className="nav-links">
                                 <li>
-                                    <NavLink to="/databases" onClick={closeMenu}>
+                                    <NavLink to="/databases">
                                         Database
                                     </NavLink>
                                 </li>
                                 {user?.is_platform_admin && (
                                     <li>
-                                        <NavLink to="/admin" onClick={closeMenu}>
+                                        <NavLink to="/admin">
                                             Administrasi
                                         </NavLink>
                                     </li>
                                 )}
+                                <li>
+                                    <NavLink to="/help">
+                                        Bantuan
+                                    </NavLink>
+                                </li>
                             </ul>
                         </nav>
 
                         <div className="nav-user">
                             <button
                                 type="button"
-                                className="btn-sm"
+                                className="btn-sm wallpaper-toggle"
                                 aria-pressed={showWallpaper}
+                                aria-label={
+                                    showWallpaper
+                                        ? "Matikan wallpaper latar"
+                                        : "Aktifkan wallpaper latar"
+                                }
                                 onClick={toggleWallpaper}
                                 title="Tampilkan atau sembunyikan wallpaper latar"
                             >
-                                {showWallpaper ? "Wallpaper: On" : "Wallpaper: Off"}
+                                <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                >
+                                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <path d="m21 15-5-5L5 21" />
+                                </svg>
+                                <span className="wallpaper-prefix">Wallpaper:</span>
+                                <span>{showWallpaper ? "On" : "Off"}</span>
                             </button>
-                            <span className="user-chip">{user?.username}</span>
-                            <button type="button" onClick={handleLogout} disabled={isLoggingOut}>
+                            <span className="user-chip" title={user?.username}>
+                                {user?.username}
+                            </span>
+                            <button
+                                type="button"
+                                className="nav-logout"
+                                onClick={handleLogout}
+                                disabled={isLoggingOut}
+                            >
                                 {isLoggingOut ? "Keluar..." : "Keluar"}
                             </button>
                         </div>

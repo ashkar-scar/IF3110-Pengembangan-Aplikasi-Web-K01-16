@@ -80,14 +80,6 @@ export function LoginPage() {
             </div>
             <main className="app-main login-stage">
                 <section className="login-shell card">
-                    <div className="login-art">
-                        <img
-                            src={schoolBg}
-                            alt="Ilustrasi ruang kerja clubroom DBManager"
-                            className="login-art-img"
-                        />
-                    </div>
-
                     <div className="login-pane">
                         <div className="login-brand">
                             <BrandMark size={24} />

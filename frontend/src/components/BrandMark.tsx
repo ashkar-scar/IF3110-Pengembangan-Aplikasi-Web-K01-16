@@ -8,20 +8,13 @@ export function BrandMark({ size = 24 }: { size?: number }) {
             aria-hidden="true"
             className="brand-mark"
         >
-            <rect
-                x="2"
-                y="2"
-                width="28"
-                height="28"
-                rx="6"
-                fill="#236b52"
-                stroke="#1c2128"
-                strokeWidth="2"
+            <path
+                d="M6 9.5L16 4l10 5.5v13L16 28 6 22.5v-7L16 10l5.2 3v6.2L16 22.2l-4.8-2.8"
+                stroke="currentColor"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
             />
-            <rect x="7" y="8" width="18" height="4" rx="1.5" fill="#f7f3eb" />
-            <rect x="7" y="14" width="18" height="4" rx="1.5" fill="#f7f3eb" />
-            <rect x="7" y="20" width="12" height="4" rx="1.5" fill="#f7f3eb" />
-            <rect x="21" y="20" width="4" height="4" rx="1.5" fill="#f2c94c" />
         </svg>
     );
 }

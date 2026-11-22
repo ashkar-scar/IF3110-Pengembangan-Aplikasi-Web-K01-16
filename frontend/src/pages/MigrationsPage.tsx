@@ -43,6 +43,7 @@ export function MigrationsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
     const [tabErrors, setTabErrors] = useState<Partial<Record<MigrationTab, string>>>({});
+    const [jobsEndpointMissing, setJobsEndpointMissing] = useState(false);
 
     const loadAll = useCallback(async () => {
         if (!Number.isInteger(targetId) || targetId <= 0) {
@@ -53,6 +54,7 @@ export function MigrationsPage() {
 
         setError("");
         setTabErrors({});
+        setJobsEndpointMissing(false);
         try {
             const targets = await fetchDatabases();
             const currentTarget = targets.find((item) => item.id === targetId) ?? null;
@@ -72,10 +74,15 @@ export function MigrationsPage() {
             ]);
 
             const nextErrors: Partial<Record<MigrationTab, string>> = {};
-            const readErr = (res: PromiseRejectedResult) =>
-                res.reason instanceof ApiRequestError
-                    ? res.reason.message
-                    : "Endpoint belum tersedia di server.";
+            const readErr = (res: PromiseRejectedResult) => {
+                if (res.reason instanceof ApiRequestError) {
+                    if (res.reason.status === 404 && res.reason.code === "INVALID_RESPONSE") {
+                        return "Endpoint untuk tab ini belum tersedia di server.";
+                    }
+                    return res.reason.message;
+                }
+                return "Endpoint belum tersedia di server.";
+            };
 
             if (draftRes.status === "fulfilled") setDrafts(draftRes.value);
             else nextErrors.drafts = readErr(draftRes);
@@ -83,8 +90,17 @@ export function MigrationsPage() {
             if (reviewRes.status === "fulfilled") setReviews(reviewRes.value);
             else nextErrors.reviews = readErr(reviewRes);
 
-            if (jobRes.status === "fulfilled") setJobs(jobRes.value);
-            else nextErrors.jobs = readErr(jobRes);
+            if (jobRes.status === "fulfilled") {
+                setJobs(jobRes.value.jobs);
+            } else if (
+                jobRes.reason instanceof ApiRequestError &&
+                jobRes.reason.status === 404 &&
+                jobRes.reason.code === "INVALID_RESPONSE"
+            ) {
+                setJobsEndpointMissing(true);
+            } else {
+                nextErrors.jobs = readErr(jobRes);
+            }
 
             if (historyRes.status === "fulfilled") setHistory(historyRes.value);
             else nextErrors.history = readErr(historyRes);
@@ -121,20 +137,29 @@ export function MigrationsPage() {
             <section className="card">
                 <div className="page-header">
                     <div>
-                        <p className="breadcrumb">
-                            <Link to="/databases">Daftar Database</Link> /{" "}
-                            <Link to={`/databases/${id}`}>Explorer</Link> / Migrations
-                        </p>
+                        <nav className="breadcrumb" aria-label="Navigasi halaman">
+                            <Link to="/databases">Daftar Database</Link>
+                            <span className="breadcrumb-sep" aria-hidden="true">/</span>
+                            <Link to={`/databases/${id}`}>Explorer</Link>
+                            <span className="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span className="breadcrumb-current">Migrations</span>
+                        </nav>
                         <h1>Migrations: {target ? target.name : `Database #${id}`}</h1>
                         {target && (
-                            <p className="muted">
-                                <code>{target.driver}</code>{" "}
-                                <span
-                                    className={`badge ${canEdit ? "success" : "info"}`}
-                                >
-                                    {target.permission}
+                            <div className="meta-row">
+                                <span className="meta-chip">
+                                    <span className="meta-label">Driver</span>
+                                    <code>{target.driver}</code>
                                 </span>
-                            </p>
+                                <span className="meta-chip">
+                                    <span className="meta-label">Izin</span>
+                                    <span
+                                        className={`badge ${canEdit ? "success" : "info"}`}
+                                    >
+                                        {target.permission}
+                                    </span>
+                                </span>
+                            </div>
                         )}
                     </div>
 
@@ -261,7 +286,22 @@ export function MigrationsPage() {
                             />
                         )}
                         {activeTab === "jobs" && !tabErrors.jobs && (
-                            <JobsPanel canEdit={canEdit} jobs={jobs} onRefresh={loadAll} />
+                            jobsEndpointMissing ? (
+                                <section className="card">
+                                    <StatePanel
+                                        variant="empty"
+                                        title="Antrean worker belum aktif"
+                                        message="Endpoint pantauan job (/api/databases/:id/jobs) belum tersedia di server backend ini."
+                                        onRetry={() => {
+                                            setIsLoading(true);
+                                            void loadAll();
+                                        }}
+                                        retryLabel="Cek Ulang"
+                                    />
+                                </section>
+                            ) : (
+                                <JobsPanel canEdit={canEdit} jobs={jobs} onRefresh={loadAll} />
+                            )
                         )}
                         {activeTab === "history" && !tabErrors.history && (
                             <HistoryPanel

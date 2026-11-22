@@ -25,6 +25,7 @@ export function StatePanel({
             role={variant === "error" ? "alert" : "status"}
         >
             {variant === "empty" && <InteractiveYuzuki variant="inline" />}
+            {variant === "error" && <InteractiveYuzuki variant="inline" defaultMood="sad" />}
             <div className="state-copy">
                 <p className="state-title">{title}</p>
                 <p className="muted">{message}</p>

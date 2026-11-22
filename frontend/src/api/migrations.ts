@@ -1,6 +1,7 @@
 import type {
     ExplainResponse,
     HistoryResponse,
+    JobListResponse,
     MigrationDraft,
     MigrationJob,
     MigrationRequest,
@@ -64,13 +65,24 @@ export function rejectReview(targetId: number, reqId: number, note: string) {
 export function enqueueReview(targetId: number, reqId: number) {
     return apiRequest<{ job_id: string; status: string }>(
         `/api/databases/${targetId}/reviews/${reqId}/enqueue`,
-        { method: "POST" },
+        // Mengirim body kosong supaya apiRequest menyertakan Content-Type application/json sesuai kontrak backend.
+        { method: "POST", body: {} },
     );
 }
 
 // Mengelompokkan endpoint pantauan job async, retry, dan cancel batch.
-export function fetchDatabaseJobs(targetId: number) {
-    return apiRequest<MigrationJob[]>(`/api/databases/${targetId}/jobs`);
+export async function fetchDatabaseJobs(targetId: number, offset = 0): Promise<JobListResponse> {
+    const query = offset > 0 ? `?offset=${offset}` : "";
+    const data = await apiRequest<JobListResponse | MigrationJob[]>(
+        `/api/databases/${targetId}/jobs${query}`,
+    );
+    if (Array.isArray(data)) {
+        return { jobs: data, has_more: false };
+    }
+    return {
+        jobs: data?.jobs ?? [],
+        has_more: Boolean(data?.has_more),
+    };
 }
 
 export function fetchJobDetail(jobId: string) {
@@ -80,12 +92,14 @@ export function fetchJobDetail(jobId: string) {
 export function retryJob(jobId: string) {
     return apiRequest<{ job_id: string; status: string }>(`/api/jobs/${jobId}/retry`, {
         method: "POST",
+        body: {},
     });
 }
 
 export function cancelBatchJob(jobId: string) {
     return apiRequest<{ request_id?: number; job_id?: string }>(`/api/jobs/${jobId}/cancel-batch`, {
         method: "POST",
+        body: {},
     });
 }
 

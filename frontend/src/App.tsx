@@ -7,6 +7,7 @@ import { DatabasesPage } from "./pages/DatabasesPage";
 import { ExplorerPage } from "./pages/ExplorerPage";
 import { AdminPage } from "./pages/AdminPage";
 import { DiffPage } from "./pages/DiffPage";
+import { HelpPage } from "./pages/HelpPage";
 import { MigrationsPage } from "./pages/MigrationsPage";
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
               <Route path="/databases/:id" element={<ExplorerPage />} />
               <Route path="/databases/:id/migrations" element={<MigrationsPage />} />
               <Route path="/databases/:id/diff" element={<DiffPage />} />
+              <Route path="/help" element={<HelpPage />} />
 
               <Route element={<ProtectedRoute requireAdmin />}>
                 <Route path="/admin" element={<AdminPage />} />
