@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS migration_attempts (
     finished_at TIMESTAMPTZ
 );
 
+ALTER TABLE migration_attempts
+    ADD COLUMN IF NOT EXISTS request_id BIGINT REFERENCES migration_requests(id),
+    ADD COLUMN IF NOT EXISTS job_id TEXT,
+    ADD COLUMN IF NOT EXISTS action_type TEXT NOT NULL DEFAULT 'UP' CHECK (action_type IN ('UP','ROLLBACK','FORWARD','CANCEL_BATCH')),
+    ADD COLUMN IF NOT EXISTS reverts_execution_id TEXT,
+    ADD COLUMN IF NOT EXISTS attempt_no INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS batch_no INTEGER;
+
 CREATE INDEX IF NOT EXISTS migration_drafts_target_idx ON migration_drafts (target_id, updated_at);
 CREATE INDEX IF NOT EXISTS migration_requests_target_idx ON migration_requests (target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS migration_approvals_request_idx ON migration_approvals (request_id, group_id);
