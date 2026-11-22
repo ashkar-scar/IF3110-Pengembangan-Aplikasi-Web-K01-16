@@ -27,7 +27,7 @@ export function AppLayout() {
         setIsLoggingOut(true);
         try {
             await logout();
-            navigate("/login", { replace: true });
+            navigate("/login", { replace: true, state: null });
         } finally {
             setIsLoggingOut(false);
         }

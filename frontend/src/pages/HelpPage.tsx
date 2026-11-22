@@ -307,8 +307,18 @@ export function HelpPage() {
                     ke review.
                 </p>
 
-                <h2>Mengisi formulir draft</h2>
+                <h2>Susun skema lewat GUI atau tulis SQL</h2>
                 <dl className="docs-fields">
+                    <div>
+                        <dt>Bantu Susun Skema via GUI</dt>
+                        <dd>
+                            Buka bagian <strong>Bantu Susun Skema via GUI</strong> di atas formulir
+                            draft untuk membuat tabel, menambah atau menghapus kolom, mengganti nama
+                            tabel, menghapus tabel, atau membuat index tanpa menulis DDL secara
+                            manual. Klik <strong>Terapkan ke Form Draft</strong> agar SQL Up dan SQL
+                            Down terisi otomatis sesuai driver target (PostgreSQL atau SQLite).
+                        </dd>
+                    </div>
                     <div>
                         <dt>Deskripsi Migration</dt>
                         <dd>
@@ -516,9 +526,11 @@ export function HelpPage() {
                     <div>
                         <dt>Targets</dt>
                         <dd>
-                            Mendaftarkan koneksi database baru (PostgreSQL atau SQLite), mengubah pengaturan
-                            koneksi, menonaktifkan target, serta memeriksa koneksi lewat tombol{" "}
-                            <strong>Test</strong>.
+                            Mendaftarkan koneksi database baru (PostgreSQL atau SQLite), mengubah
+                            pengaturan koneksi, menonaktifkan target, serta memeriksa koneksi lewat
+                            tombol <strong>Test</strong>. Untuk SQLite, file database dibuat otomatis
+                            oleh sistem; untuk PostgreSQL, Anda dapat menyambungkan database yang
+                            sudah ada atau mencentang opsi buat database baru langsung dari form.
                         </dd>
                     </div>
                 </dl>

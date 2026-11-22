@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const session = await loginRequest(username, password);
         setCsrfToken(session.csrf_token);
         setUser(session.user);
+        return session.user;
     }, []);
 
     const logout = useCallback(async () => {

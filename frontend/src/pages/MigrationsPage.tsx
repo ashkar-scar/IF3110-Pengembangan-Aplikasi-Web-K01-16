@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { fetchDatabases } from "../api/databases";
+import { fetchDatabases, fetchDatabaseSchema } from "../api/databases";
 import {
     fetchDatabaseJobs,
     fetchDrafts,
@@ -13,7 +13,7 @@ import { JobsPanel } from "../components/migrations/JobsPanel";
 import { ReviewsPanel } from "../components/migrations/ReviewsPanel";
 import { StatePanel } from "../components/StatePanel";
 import { ApiRequestError } from "../types/auth";
-import type { DatabaseTarget } from "../types/database";
+import type { DatabaseSnapshot, DatabaseTarget } from "../types/database";
 import type {
     HistoryResponse,
     MigrationDraft,
@@ -38,6 +38,7 @@ export function MigrationsPage() {
     const [reviews, setReviews] = useState<MigrationRequest[]>([]);
     const [jobs, setJobs] = useState<MigrationJob[]>([]);
     const [history, setHistory] = useState<HistoryResponse | null>(null);
+    const [schemaSnapshot, setSchemaSnapshot] = useState<DatabaseSnapshot | null>(null);
     const [hideRollback, setHideRollback] = useState(false);
     const [historyOffset, setHistoryOffset] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -66,11 +67,12 @@ export function MigrationsPage() {
             }
 
             // Memakai allSettled supaya kalau ada endpoint M2 yang belum live di backend, tab lain tetap kebuka.
-            const [draftRes, reviewRes, jobRes, historyRes] = await Promise.allSettled([
+            const [draftRes, reviewRes, jobRes, historyRes, schemaRes] = await Promise.allSettled([
                 fetchDrafts(targetId),
                 fetchReviews(targetId),
                 fetchDatabaseJobs(targetId),
                 fetchHistory(targetId, hideRollback, historyOffset),
+                fetchDatabaseSchema(targetId),
             ]);
 
             const nextErrors: Partial<Record<MigrationTab, string>> = {};
@@ -104,6 +106,8 @@ export function MigrationsPage() {
 
             if (historyRes.status === "fulfilled") setHistory(historyRes.value);
             else nextErrors.history = readErr(historyRes);
+
+            if (schemaRes.status === "fulfilled") setSchemaSnapshot(schemaRes.value.snapshot);
 
             setTabErrors(nextErrors);
         } catch (err) {
@@ -268,7 +272,10 @@ export function MigrationsPage() {
                         )}
                         {activeTab === "drafts" && (
                             <DraftsPanel
+                                key={initialSql}
                                 targetId={targetId}
+                                driver={target?.driver ?? "postgres"}
+                                schemaSnapshot={schemaSnapshot}
                                 canEdit={canEdit}
                                 drafts={drafts}
                                 initialSql={initialSql}

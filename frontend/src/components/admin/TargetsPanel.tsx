@@ -26,6 +26,9 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
     const [password, setPassword] = useState("");
     const [sslmode, setSslmode] = useState("disable");
     const [isActive, setIsActive] = useState(true);
+    const [createDatabase, setCreateDatabase] = useState(false);
+    const [creatorUsername, setCreatorUsername] = useState("");
+    const [creatorPassword, setCreatorPassword] = useState("");
 
     const [testingId, setTestingId] = useState<number | null>(null);
     const [error, setError] = useState("");
@@ -43,6 +46,9 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
         setPassword("");
         setSslmode("disable");
         setIsActive(true);
+        setCreateDatabase(false);
+        setCreatorUsername("");
+        setCreatorPassword("");
     }
 
     function startEdit(target: AdminDatabaseTarget) {
@@ -57,6 +63,9 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
         setPassword("");
         setSslmode(target.sslmode || "disable");
         setIsActive(target.is_active);
+        setCreateDatabase(false);
+        setCreatorUsername("");
+        setCreatorPassword("");
         setError("");
         setNotice("");
     }
@@ -90,12 +99,21 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
                     password,
                     sslmode,
                     is_active: isActive,
+                    ...(editingId === null && createDatabase
+                        ? {
+                            create_database: true,
+                            creator_username: creatorUsername.trim(),
+                            creator_password: creatorPassword,
+                        }
+                        : {}),
                 };
 
         try {
             if (editingId === null) {
                 await createAdminTarget(payload);
-                setNotice(`Target "${payload.name}" berhasil ditambahkan.`);
+                setNotice(
+                    `Target "${payload.name}" berhasil ditambahkan. Jangan lupa beri akses grup di tab Grants agar muncul di Daftar Database.`,
+                );
             } else {
                 await updateAdminTarget(editingId, payload);
                 setNotice(`Target "${payload.name}" berhasil diperbarui.`);
@@ -190,10 +208,31 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
 
                     {driver === "sqlite" ? (
                         <p className="muted">
-                            File SQLite akan dibuat dan dikelola otomatis oleh backend.
+                            File SQLite akan dibuat dan dikelola otomatis oleh backend (tidak perlu isi host/port).
                         </p>
                     ) : (
-                        <div className="form-grid">
+                        <>
+                            <div className="action-row" style={{ marginBottom: "0.75rem" }}>
+                                <button
+                                    type="button"
+                                    className="btn-sm"
+                                    onClick={() => {
+                                        setHost("127.0.0.1");
+                                        setPort("54329");
+                                        setUsername("target_user");
+                                        setSslmode("disable");
+                                        if (!database) {
+                                            setDatabase("sales");
+                                        }
+                                    }}
+                                >
+                                    Isi Preset Postgres Lokal
+                                </button>
+                                <span className="muted" style={{ fontSize: "0.85rem" }}>
+                                    Database PostgreSQL harus sudah ada di server target (contoh compose lokal: <code>sales</code>, <code>hr</code>, <code>target_test</code>).
+                                </span>
+                            </div>
+                            <div className="form-grid">
                             <div className="field">
                                 <label htmlFor="target-host">Host</label>
                                 <input
@@ -268,7 +307,8 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
                                     ))}
                                 </select>
                             </div>
-                        </div>
+                            </div>
+                        </>
                     )}
 
                     <div className="checkbox-row">
@@ -281,6 +321,58 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
                             Aktif
                         </label>
                     </div>
+
+                    {editingId === null && driver === "postgres" && (
+                        <div className="stack" style={{ marginBottom: "1rem" }}>
+                            <div className="checkbox-row">
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={createDatabase}
+                                        onChange={(e) => setCreateDatabase(e.target.checked)}
+                                    />
+                                    Buat database PostgreSQL baru jika belum ada
+                                </label>
+                            </div>
+
+                            {createDatabase && (
+                                <div className="details-box" style={{ marginBlockStart: 0 }}>
+                                    <p className="muted" style={{ marginTop: 0 }}>
+                                        Kosongkan field di bawah jika <strong>Username DB</strong> di
+                                        atas sudah punya izin <code>CREATEDB</code>. Jika memakai user
+                                        biasa (misal <code>target_user</code> di compose lokal), isi
+                                        kredensial admin/superuser PostgreSQL (misal{" "}
+                                        <code>platform</code>) hanya untuk pembuatan database ini.
+                                    </p>
+                                    <div className="form-grid">
+                                        <div className="field">
+                                            <label htmlFor="target-creator-user">
+                                                Admin DB Pembuat (opsional)
+                                            </label>
+                                            <input
+                                                id="target-creator-user"
+                                                type="text"
+                                                value={creatorUsername}
+                                                onChange={(e) => setCreatorUsername(e.target.value)}
+                                                placeholder="Kosongkan atau isi misal: platform"
+                                            />
+                                        </div>
+                                        <div className="field">
+                                            <label htmlFor="target-creator-pass">
+                                                Password Admin DB (opsional)
+                                            </label>
+                                            <input
+                                                id="target-creator-pass"
+                                                type="password"
+                                                value={creatorPassword}
+                                                onChange={(e) => setCreatorPassword(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div className="action-row">
                         <button type="submit" className="primary" disabled={isSubmitting}>

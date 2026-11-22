@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Menyediakan operasi registry database untuk endpoint admin
@@ -118,15 +120,18 @@ func (a *API) databaseRoutes(mux *http.ServeMux) {
 
 // Menampung konfigurasi target dari request admin
 type targetRequest struct {
-	Name     string `json:"name"`
-	Driver   string `json:"driver"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	SSLMode  string `json:"sslmode"`
-	Active   *bool  `json:"is_active"`
+	Name            string `json:"name"`
+	Driver          string `json:"driver"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	Database        string `json:"database"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	SSLMode         string `json:"sslmode"`
+	Active          *bool  `json:"is_active"`
+	CreateDatabase  bool   `json:"create_database"`
+	CreatorUsername string `json:"creator_username"`
+	CreatorPassword string `json:"creator_password"`
 }
 
 // Mengubah request menjadi model database target
@@ -182,6 +187,47 @@ func (a *API) updateDatabaseTarget(w http.ResponseWriter, r *http.Request, _ aut
 	a.saveDatabaseTarget(w, r, id)
 }
 
+var errInvalidNewDatabase = errors.New("nama database baru tidak diizinkan")
+
+func ensurePostgresDatabase(ctx context.Context, target core.DatabaseTarget, creatorUsername, creatorPassword string) error {
+	name := strings.TrimSpace(target.Database)
+	if name == "" || len(name) > 63 || strings.ContainsRune(name, '\x00') {
+		return errInvalidNewDatabase
+	}
+	switch strings.ToLower(name) {
+	case "postgres", "template0", "template1", "platform", "platform_test":
+		return errInvalidNewDatabase
+	}
+
+	adminUser := strings.TrimSpace(creatorUsername)
+	adminPass := creatorPassword
+	if adminUser == "" {
+		adminUser = target.Username
+		adminPass = target.Password
+	}
+
+	return targetdb.EnsurePostgresDatabase(ctx, targetdb.Config{
+		Host:     target.Host,
+		Port:     target.Port,
+		Username: adminUser,
+		SSLMode:  target.SSLMode,
+	}, adminPass, name, target.Username)
+}
+
+func postgresCreateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errInvalidNewDatabase) || errors.Is(err, targetdb.ErrInvalidPostgresIdentifier) {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", "Nama database atau owner hanya boleh huruf, angka, garis bawah (_), tanda hubung (-), dan bukan database sistem/platform")
+		return
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		log.Printf("Pembuatan database PostgreSQL gagal (%s): %v", pgErr.Code, err)
+		writeError(w, http.StatusUnprocessableEntity, "CREATE_DATABASE_FAILED", "Gagal membuat database PostgreSQL; periksa izin CREATEDB atau kredensial admin DB")
+		return
+	}
+	targetError(w, err)
+}
+
 // Memvalidasi lalu menyimpan konfigurasi target
 func (a *API) saveDatabaseTarget(w http.ResponseWriter, r *http.Request, id int64) {
 	var request targetRequest
@@ -193,6 +239,13 @@ func (a *API) saveDatabaseTarget(w http.ResponseWriter, r *http.Request, id int6
 	if err := store.ValidateTarget(target); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION", err.Error())
 		return
+	}
+
+	if id == 0 && target.Driver == "postgres" && request.CreateDatabase {
+		if err := ensurePostgresDatabase(r.Context(), target, request.CreatorUsername, request.CreatorPassword); err != nil {
+			postgresCreateError(w, err)
+			return
+		}
 	}
 
 	var err error
