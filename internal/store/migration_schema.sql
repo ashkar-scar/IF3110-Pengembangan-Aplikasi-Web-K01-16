@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS migration_attempts (
     target_id BIGINT NOT NULL,
     draft_id BIGINT NOT NULL REFERENCES migration_drafts(id),
     draft_revision INTEGER NOT NULL,
+    request_id BIGINT REFERENCES migration_requests(id),
+    job_id TEXT,
+    action_type TEXT NOT NULL DEFAULT 'UP' CHECK (action_type IN ('UP', 'ROLLBACK', 'FORWARD', 'CANCEL_BATCH')),
+    reverts_execution_id TEXT,
+    attempt_no INTEGER NOT NULL DEFAULT 1,
+    batch_no INTEGER,
     description TEXT NOT NULL,
     sql_text TEXT NOT NULL,
     actor_id BIGINT NOT NULL,
@@ -81,11 +87,11 @@ CREATE TABLE IF NOT EXISTS migration_attempts (
     status TEXT NOT NULL CHECK (status IN ('RUNNING', 'SUCCESS', 'FAILED', 'UNKNOWN')),
     safe_error TEXT NOT NULL DEFAULT '',
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    finished_at TIMESTAMPTZ,
-    UNIQUE (draft_id, draft_revision)
+    finished_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS migration_drafts_target_idx ON migration_drafts (target_id, updated_at);
 CREATE INDEX IF NOT EXISTS migration_requests_target_idx ON migration_requests (target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS migration_approvals_request_idx ON migration_approvals (request_id, group_id);
 CREATE INDEX IF NOT EXISTS migration_attempts_target_idx ON migration_attempts (target_id, started_at);
+CREATE INDEX IF NOT EXISTS migration_attempts_reverts_idx ON migration_attempts (reverts_execution_id);
