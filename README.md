@@ -132,6 +132,11 @@ CodeQL dikonfigurasi melalui [`.github/workflows/codeql.yml`](.github/workflows/
 | 23 Nov 2026 | Push ke `main` | `6b07bf3` | Success | [Run 45063104964](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45063104964) |
 | 23 Nov 2026 | Pull request | `fix/draft_migration` / `27a8b62` | Success | [Run 45102403746](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45102403746) |
 | 23 Nov 2026 | Push ke `main` | `4d7dd55` | Success | [Run 45105977800](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45105977800) |
+| 23 Nov 2026 | Push ke `main` | `e17dae6` | Success | [Run 45111290205](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45111290205) |
+| 23 Nov 2026 | Pull request | `feat/spa-frontend` / `9e3966c` | Success | [Run 45113302085](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45113302085) |
+| 23 Nov 2026 | Push ke `main` | `b8bba39` | Success | [Run 45113875260](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45113875260) |
+| 23 Nov 2026 | Pull request | `feat/spa-frontend` / `4499a00` | Success | [Run 45119383893](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45119383893) |
+| 23 Nov 2026 | Push ke `main` | `358aa3b` | Success | [Run 45119640872](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45119640872) |
 
 History ada di [Actions CodeQL](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/workflows/codeql.yml)
 
