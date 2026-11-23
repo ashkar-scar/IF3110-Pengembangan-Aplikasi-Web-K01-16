@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { approveReview, enqueueReview, rejectReview } from "../../api/migrations";
+import { StatePanel } from "../StatePanel";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { ApiRequestError } from "../../types/auth";
 import type { ApprovalDecision, MigrationRequest, ReviewStatus } from "../../types/migration";
 
@@ -29,6 +32,12 @@ export function ReviewsPanel({
     const [busyId, setBusyId] = useState<number | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const pager = usePagedList(
+        reviews,
+        (r) => `${r.id} ${r.description} ${r.requested_by_name} ${r.status} ${r.action_type}`,
+        10,
+        8,
+    );
 
     async function handleApprove(reqId: number) {
         setError("");
@@ -98,12 +107,42 @@ export function ReviewsPanel({
                 </p>
             )}
 
+            {pager.shouldShowSearch && (
+                <section className="card">
+                    <div className="page-header">
+                        <h2>Daftar Review ({reviews.length})</h2>
+                        <input
+                            type="search"
+                            aria-label="Cari review"
+                            placeholder="Cari review / status / pengaju..."
+                            value={pager.query}
+                            onChange={(e) => pager.setQuery(e.target.value)}
+                            style={{ maxInlineSize: "260px" }}
+                        />
+                    </div>
+                </section>
+            )}
+
             {reviews.length === 0 ? (
                 <section className="card">
                     <p className="muted">Belum ada pengajuan migration untuk direview.</p>
                 </section>
+            ) : pager.filteredTotal === 0 ? (
+                <section className="card">
+                    <StatePanel
+                        variant="empty"
+                        title="Review tidak ditemukan"
+                        message={`Tidak ada review yang cocok dengan "${pager.query}".`}
+                        action={
+                            <button type="button" onClick={() => pager.setQuery("")}>
+                                Reset Pencarian
+                            </button>
+                        }
+                    />
+                </section>
             ) : (
-                reviews.map((req) => (
+                <>
+                    {pager.pageItems.map((req) => (
                     <section key={req.id} className="card stack">
                         <div className="page-header">
                             <div>
@@ -202,7 +241,19 @@ export function ReviewsPanel({
                             </div>
                         )}
                     </section>
-                ))
+                ))}
+                {pager.shouldShowPagination && (
+                    <section className="card">
+                        <TablePaginationBar
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            totalItems={pager.filteredTotal}
+                            pageSize={pager.pageSize}
+                            onPageChange={pager.setPage}
+                        />
+                    </section>
+                )}
+            </>
             )}
         </div>
     );

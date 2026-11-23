@@ -32,14 +32,35 @@ function formatConstraintKind(kind: string) {
     }
 }
 
+const CELL_PREVIEW_LIMIT = 120;
+
+function ExpandableCell({ text }: { text: string }) {
+    const [expanded, setExpanded] = useState(false);
+
+    if (text.length <= CELL_PREVIEW_LIMIT) {
+        return <span className="cell-wrap">{text}</span>;
+    }
+
+    return (
+        <span className="cell-expandable">
+            <span>{expanded ? text : `${text.slice(0, CELL_PREVIEW_LIMIT)}…`}</span>
+            <button
+                type="button"
+                className="btn-inline"
+                onClick={() => setExpanded((prev) => !prev)}
+            >
+                {expanded ? "Ringkas" : "Selengkapnya"}
+            </button>
+        </span>
+    );
+}
+
 function formatCellValue(value: unknown) {
     if (value === null || value === undefined) {
         return <span className="null-pill">NULL</span>;
     }
-    if (typeof value === "object") {
-        return JSON.stringify(value);
-    }
-    return String(value);
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+    return <ExpandableCell text={text} />;
 }
 
 export function ExplorerPage() {
