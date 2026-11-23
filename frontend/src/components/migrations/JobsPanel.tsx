@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { cancelBatchJob, fetchJobDetail, retryJob } from "../../api/migrations";
 import { ApiRequestError } from "../../types/auth";
 import type { JobStatus, MigrationJob } from "../../types/migration";
+import { usePagedList } from "../../utils/usePagedList";
+import { TablePaginationBar } from "../TablePager";
 
 interface JobsPanelProps {
     canEdit: boolean;
@@ -19,7 +21,7 @@ function jobBadgeClass(status: JobStatus) {
     return "badge warning";
 }
 
-const JOBS_PAGE_SIZE = 200;
+const JOBS_SERVER_CHUNK = 200;
 
 export function JobsPanel({
     canEdit,
@@ -33,6 +35,14 @@ export function JobsPanel({
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+
+    const pagedJobs = usePagedList(
+        jobs,
+        (job) =>
+            `${job.id} #${job.request_id} ${job.action_type} ${job.execution_mode} ${job.status} ${job.safe_error}`,
+        10,
+        8,
+    );
 
     const hasActiveJobs = jobs.some((j) => j.status === "PENDING" || j.status === "RUNNING");
     const selectedJobId = selectedJob?.id ?? null;
@@ -122,12 +132,30 @@ export function JobsPanel({
                 </p>
             )}
 
+            {pagedJobs.shouldShowSearch && (
+                <section className="card">
+                    <div className="table-toolbar">
+                        <input
+                            type="search"
+                            aria-label="Cari job migration"
+                            placeholder="Filter ID job, request #, mode, status, atau pesan error..."
+                            value={pagedJobs.query}
+                            onChange={(e) => pagedJobs.setQuery(e.target.value)}
+                        />
+                    </div>
+                </section>
+            )}
+
             {jobs.length === 0 ? (
                 <section className="card">
                     <p className="muted">Belum ada job eksekusi migration pada target ini.</p>
                 </section>
+            ) : pagedJobs.pageItems.length === 0 ? (
+                <section className="card">
+                    <p className="muted">Tidak ada job yang cocok dengan filter pencarian.</p>
+                </section>
             ) : (
-                jobs.map((job) => {
+                pagedJobs.pageItems.map((job) => {
                     const progressPercent =
                         job.total_batches > 0
                             ? Math.min(
@@ -135,6 +163,9 @@ export function JobsPanel({
                                   Math.round((job.completed_batches / job.total_batches) * 100),
                               )
                             : 0;
+                    const isStaleConflict =
+                        job.safe_error.includes("versi database telah berubah") ||
+                        job.safe_error.includes("schema telah berubah");
 
                     return (
                         <section key={job.id} className="card stack">
@@ -184,7 +215,7 @@ export function JobsPanel({
                                 >
                                     Detail Checkpoint
                                 </button>
-                                {canEdit && job.can_retry && (
+                                {canEdit && job.can_retry && !isStaleConflict && (
                                     <button
                                         type="button"
                                         className="btn-sm primary"
@@ -193,8 +224,16 @@ export function JobsPanel({
                                     >
                                         {busyId === job.id
                                             ? "Memproses..."
-                                            : "Retry dari Checkpoint"}
+                                            : job.execution_mode === "BATCH"
+                                              ? "Retry dari Checkpoint"
+                                              : "Retry Job"}
                                     </button>
+                                )}
+                                {canEdit && job.can_retry && isStaleConflict && (
+                                    <span className="muted">
+                                        Konflik versi/schema; buat revisi draft baru sebelum
+                                        mengajukan ulang.
+                                    </span>
                                 )}
                                 {canEdit && job.can_cancel_batch && (
                                     <button
@@ -213,29 +252,25 @@ export function JobsPanel({
                 })
             )}
 
-            {jobs.length > 0 && (offset > 0 || hasMore) && (
+            {(pagedJobs.shouldShowPagination || offset > 0 || hasMore) && (
                 <section className="card">
-                    <div className="pagination-bar">
-                        <span className="muted">
-                            Menampilkan {jobs.length} job mulai offset {offset}
-                        </span>
-                        <div className="action-row">
-                            <button
-                                type="button"
-                                disabled={offset === 0}
-                                onClick={() => onOffsetChange(Math.max(offset - JOBS_PAGE_SIZE, 0))}
-                            >
-                                Sebelumnya
-                            </button>
-                            <button
-                                type="button"
-                                disabled={!hasMore}
-                                onClick={() => onOffsetChange(offset + JOBS_PAGE_SIZE)}
-                            >
-                                Berikutnya
-                            </button>
-                        </div>
-                    </div>
+                    <TablePaginationBar
+                        page={pagedJobs.page}
+                        totalPages={pagedJobs.totalPages}
+                        totalItems={pagedJobs.filteredTotal}
+                        pageSize={pagedJobs.pageSize}
+                        onPageChange={pagedJobs.setPage}
+                        serverOffset={offset}
+                        hasMoreServer={hasMore}
+                        onServerPrev={() => {
+                            pagedJobs.setPage(0);
+                            onOffsetChange(Math.max(offset - JOBS_SERVER_CHUNK, 0));
+                        }}
+                        onServerNext={() => {
+                            pagedJobs.setPage(0);
+                            onOffsetChange(offset + JOBS_SERVER_CHUNK);
+                        }}
+                    />
                 </section>
             )}
 
