@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import schoolBg from "../assets/anime-school-background.jpg";
 import { useAuth } from "../context/useAuth";
@@ -14,6 +14,55 @@ export function AppLayout() {
     const [showWallpaper, setShowWallpaper] = useState(() => {
         return window.localStorage.getItem(WALLPAPER_STORAGE_KEY) !== "off";
     });
+
+    // Mengizinkan geser tabel pakai mouse drag di simulator mobile/viewport sempit saat scroll touch tidak aktif.
+    useEffect(() => {
+        let activeScroll: HTMLElement | null = null;
+        let startX = 0;
+        let startLeft = 0;
+
+        function onPointerDown(event: PointerEvent) {
+            if (event.pointerType !== "mouse" || event.button !== 0) return;
+            if (!window.matchMedia("(max-width: 768px)").matches) return;
+            const target = event.target as HTMLElement | null;
+            if (!target || target.closest("a, button, input, select, textarea, label, summary")) {
+                return;
+            }
+            const container = target.closest(".table-scroll") as HTMLElement | null;
+            if (!container || container.scrollWidth <= container.clientWidth) return;
+            event.preventDefault();
+            activeScroll = container;
+            activeScroll.style.userSelect = "none";
+            startX = event.clientX;
+            startLeft = container.scrollLeft;
+        }
+
+        function onPointerMove(event: PointerEvent) {
+            if (!activeScroll) return;
+            const deltaX = event.clientX - startX;
+            if (Math.abs(deltaX) > 4) {
+                activeScroll.scrollLeft = startLeft - deltaX;
+            }
+        }
+
+        function onPointerEnd() {
+            if (activeScroll) {
+                activeScroll.style.userSelect = "";
+            }
+            activeScroll = null;
+        }
+
+        document.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerEnd);
+        window.addEventListener("pointercancel", onPointerEnd);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown);
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerEnd);
+            window.removeEventListener("pointercancel", onPointerEnd);
+        };
+    }, []);
 
     function toggleWallpaper() {
         setShowWallpaper((prev) => {
