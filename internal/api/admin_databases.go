@@ -56,22 +56,39 @@ func asTarget(record core.DatabaseTarget, permission core.Permission) Target {
 	}
 }
 
+type batchPermissionSource interface {
+	EffectivePermissions(context.Context, int64) (map[int64]core.Permission, error)
+}
+
 // Mengambil target aktif yang dapat dilihat user
 func (s registryTargets) Targets(ctx context.Context, userID int64) ([]Target, error) {
 	records, err := s.registry.FindAll(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
+	var batch map[int64]core.Permission
+	if source, ok := s.permissions.(batchPermissionSource); ok {
+		batch, err = source.EffectivePermissions(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	targets := []Target{}
 	for _, record := range records {
 		if !record.Active {
 			continue
 		}
 
-		permission, err := s.permissions.EffectivePermission(ctx, userID, record.ID)
-		if err != nil {
-			return nil, err
+		var permission core.Permission
+		if batch != nil {
+			permission = batch[record.ID]
+		} else {
+			permission, err = s.permissions.EffectivePermission(ctx, userID, record.ID)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if permission.Can(core.PermissionView) {
@@ -256,6 +273,9 @@ func (a *API) saveDatabaseTarget(w http.ResponseWriter, r *http.Request, id int6
 		status = http.StatusCreated
 	} else {
 		target, err = a.registry.Update(r.Context(), target)
+		if err == nil {
+			a.evictTargetPool(target.ID)
+		}
 	}
 	
 	if err != nil {
@@ -287,6 +307,7 @@ func (a *API) disableDatabaseTarget(w http.ResponseWriter, r *http.Request, _ au
 		adminError(w, err)
 		return
 	}
+	a.evictTargetPool(id)
 
 	w.WriteHeader(http.StatusNoContent)
 }

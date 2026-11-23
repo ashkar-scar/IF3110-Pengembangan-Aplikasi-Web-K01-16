@@ -6,6 +6,9 @@ import type { JobStatus, MigrationJob } from "../../types/migration";
 interface JobsPanelProps {
     canEdit: boolean;
     jobs: MigrationJob[];
+    offset: number;
+    hasMore: boolean;
+    onOffsetChange: (nextOffset: number) => void;
     onRefresh: () => Promise<void>;
 }
 
@@ -16,7 +19,16 @@ function jobBadgeClass(status: JobStatus) {
     return "badge warning";
 }
 
-export function JobsPanel({ canEdit, jobs, onRefresh }: JobsPanelProps) {
+const JOBS_PAGE_SIZE = 200;
+
+export function JobsPanel({
+    canEdit,
+    jobs,
+    offset,
+    hasMore,
+    onOffsetChange,
+    onRefresh,
+}: JobsPanelProps) {
     const [selectedJob, setSelectedJob] = useState<MigrationJob | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState("");
@@ -67,20 +79,25 @@ export function JobsPanel({ canEdit, jobs, onRefresh }: JobsPanelProps) {
         }
     }
 
-    async function handleCancelBatch(jobId: string) {
-        if (!window.confirm(`Ajukan pembatalan batch terbalik (SQL down) untuk job ${jobId}?`)) {
+    async function handleCancelBatch(job: MigrationJob) {
+        // Memperjelas sifat final Cancel Batch supaya tidak tertukar dengan Rollback yang bisa di-Forward.
+        const confirmText =
+            job.status === "SUCCESS"
+                ? `Ajukan pembatalan batch (SQL down) untuk job ${job.id}?\n\nCatatan: Cancel Batch bersifat final dan tidak bisa di-Forward ulang. Jika masih ingin opsi Forward, gunakan Ajukan Rollback di tab Riwayat.`
+                : `Ajukan pembatalan batch terbalik (SQL down) untuk job ${job.id}?\n\nCatatan: Cancel Batch bersifat final dan tidak bisa di-Forward ulang.`;
+        if (!window.confirm(confirmText)) {
             return;
         }
         setError("");
         setNotice("");
-        setBusyId(jobId);
+        setBusyId(job.id);
 
         try {
-            const res = await cancelBatchJob(jobId);
+            const res = await cancelBatchJob(job.id);
             setNotice(
                 res.request_id
                     ? `Pengajuan cancel batch #${res.request_id} dibuat (perlu approval di tab Review & Approval).`
-                    : `Permintaan cancel batch untuk job ${jobId} diproses.`,
+                    : `Permintaan cancel batch untuk job ${job.id} diproses.`,
             );
             await onRefresh();
         } catch (err) {
@@ -183,8 +200,9 @@ export function JobsPanel({ canEdit, jobs, onRefresh }: JobsPanelProps) {
                                     <button
                                         type="button"
                                         className="btn-sm danger"
+                                        title="Membatalkan batch secara final (tidak bisa di-Forward ulang)"
                                         disabled={busyId === job.id}
-                                        onClick={() => handleCancelBatch(job.id)}
+                                        onClick={() => handleCancelBatch(job)}
                                     >
                                         Cancel Batch
                                     </button>
@@ -193,6 +211,32 @@ export function JobsPanel({ canEdit, jobs, onRefresh }: JobsPanelProps) {
                         </section>
                     );
                 })
+            )}
+
+            {jobs.length > 0 && (offset > 0 || hasMore) && (
+                <section className="card">
+                    <div className="pagination-bar">
+                        <span className="muted">
+                            Menampilkan {jobs.length} job mulai offset {offset}
+                        </span>
+                        <div className="action-row">
+                            <button
+                                type="button"
+                                disabled={offset === 0}
+                                onClick={() => onOffsetChange(Math.max(offset - JOBS_PAGE_SIZE, 0))}
+                            >
+                                Sebelumnya
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!hasMore}
+                                onClick={() => onOffsetChange(offset + JOBS_PAGE_SIZE)}
+                            >
+                                Berikutnya
+                            </button>
+                        </div>
+                    </div>
+                </section>
             )}
 
             {selectedJob && (

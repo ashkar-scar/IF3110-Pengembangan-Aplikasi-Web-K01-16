@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { removeGroupGrant, setGroupGrant } from "../../api/admin";
+import { StatePanel } from "../StatePanel";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { ApiRequestError } from "../../types/auth";
 import type { AdminDatabaseTarget, DatabaseGrant, Group } from "../../types/admin";
 
@@ -29,6 +32,11 @@ export function GrantsPanel({ grants, groups, targets, onRefresh }: GrantsPanelP
 
     const groupMap = new Map(groups.map((g) => [g.id, g]));
     const targetMap = new Map(targets.map((t) => [t.id, t]));
+    const pager = usePagedList(grants, (grant) => {
+        const gName = groupMap.get(grant.group_id)?.name ?? "";
+        const tName = targetMap.get(grant.database_id)?.name ?? "";
+        return `${gName} ${tName} ${grant.permission}`;
+    });
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -165,68 +173,100 @@ export function GrantsPanel({ grants, groups, targets, onRefresh }: GrantsPanelP
             </section>
 
             <section className="card">
-                <h2>Daftar Grant ({grants.length})</h2>
+                <div className="page-header">
+                    <h2>Daftar Grant ({grants.length})</h2>
+                    {pager.shouldShowSearch && (
+                        <input
+                            type="search"
+                            aria-label="Cari grant"
+                            placeholder="Cari group / database..."
+                            value={pager.query}
+                            onChange={(e) => pager.setQuery(e.target.value)}
+                            style={{ maxInlineSize: "240px" }}
+                        />
+                    )}
+                </div>
                 {grants.length === 0 ? (
                     <p className="muted">Belum ada grant yang ditetapkan.</p>
+                ) : pager.filteredTotal === 0 ? (
+                    <StatePanel
+                        variant="empty"
+                        title="Grant tidak ditemukan"
+                        message={`Tidak ada grant yang cocok dengan "${pager.query}".`}
+                        action={
+                            <button type="button" onClick={() => pager.setQuery("")}>
+                                Reset Pencarian
+                            </button>
+                        }
+                    />
                 ) : (
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Group</th>
-                                    <th>Database</th>
-                                    <th>Permission</th>
-                                    <th>Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {grants.map((grant) => {
-                                    const group = groupMap.get(grant.group_id);
-                                    const target = targetMap.get(grant.database_id);
-                                    return (
-                                        <tr key={`${grant.group_id}-${grant.database_id}`}>
-                                            <td>{group ? group.name : `Group #${grant.group_id}`}</td>
-                                            <td>
-                                                {target
-                                                    ? target.name
-                                                    : `Database #${grant.database_id}`}
-                                            </td>
-                                            <td>
-                                                <span
-                                                    className={`badge ${grant.permission === "EDIT" ? "success" : "info"}`}
-                                                >
-                                                    {grant.permission}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div className="action-row">
-                                                    <button
-                                                        type="button"
-                                                        className="btn-sm"
-                                                        disabled={isSubmitting}
-                                                        onClick={() => handleTogglePermission(grant)}
+                    <>
+                        <div className="table-scroll">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Group</th>
+                                        <th>Database</th>
+                                        <th>Permission</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pager.pageItems.map((grant) => {
+                                        const group = groupMap.get(grant.group_id);
+                                        const target = targetMap.get(grant.database_id);
+                                        return (
+                                            <tr key={`${grant.group_id}-${grant.database_id}`}>
+                                                <td>{group ? group.name : `Group #${grant.group_id}`}</td>
+                                                <td>
+                                                    {target
+                                                        ? target.name
+                                                        : `Database #${grant.database_id}`}
+                                                </td>
+                                                <td>
+                                                    <span
+                                                        className={`badge ${grant.permission === "EDIT" ? "success" : "info"}`}
                                                     >
-                                                        Ubah ke{" "}
-                                                        {grant.permission === "EDIT"
-                                                            ? "VIEW"
-                                                            : "EDIT"}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="btn-sm danger"
-                                                        disabled={isSubmitting}
-                                                        onClick={() => handleRemove(grant)}
-                                                    >
-                                                        Cabut
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                                                        {grant.permission}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div className="action-row">
+                                                        <button
+                                                            type="button"
+                                                            className="btn-sm"
+                                                            disabled={isSubmitting}
+                                                            onClick={() => handleTogglePermission(grant)}
+                                                        >
+                                                            Ubah ke{" "}
+                                                            {grant.permission === "EDIT"
+                                                                ? "VIEW"
+                                                                : "EDIT"}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="btn-sm danger"
+                                                            disabled={isSubmitting}
+                                                            onClick={() => handleRemove(grant)}
+                                                        >
+                                                            Cabut
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePaginationBar
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            totalItems={pager.filteredTotal}
+                            pageSize={pager.pageSize}
+                            onPageChange={pager.setPage}
+                        />
+                    </>
                 )}
             </section>
         </div>

@@ -37,6 +37,8 @@ export function MigrationsPage() {
     const [drafts, setDrafts] = useState<MigrationDraft[]>([]);
     const [reviews, setReviews] = useState<MigrationRequest[]>([]);
     const [jobs, setJobs] = useState<MigrationJob[]>([]);
+    const [jobsHasMore, setJobsHasMore] = useState(false);
+    const [jobsOffset, setJobsOffset] = useState(0);
     const [history, setHistory] = useState<HistoryResponse | null>(null);
     const [schemaSnapshot, setSchemaSnapshot] = useState<DatabaseSnapshot | null>(null);
     const [hideRollback, setHideRollback] = useState(false);
@@ -70,7 +72,7 @@ export function MigrationsPage() {
             const [draftRes, reviewRes, jobRes, historyRes, schemaRes] = await Promise.allSettled([
                 fetchDrafts(targetId),
                 fetchReviews(targetId),
-                fetchDatabaseJobs(targetId),
+                fetchDatabaseJobs(targetId, jobsOffset),
                 fetchHistory(targetId, hideRollback, historyOffset),
                 fetchDatabaseSchema(targetId),
             ]);
@@ -94,6 +96,7 @@ export function MigrationsPage() {
 
             if (jobRes.status === "fulfilled") {
                 setJobs(jobRes.value.jobs);
+                setJobsHasMore(jobRes.value.has_more);
             } else if (
                 jobRes.reason instanceof ApiRequestError &&
                 jobRes.reason.status === 404 &&
@@ -115,7 +118,7 @@ export function MigrationsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [targetId, hideRollback, historyOffset]);
+    }, [targetId, hideRollback, historyOffset, jobsOffset]);
 
     useEffect(() => {
         // Memakai Promise chain di effect biar eslint react-hooks/set-state-in-effect gak protes.
@@ -307,7 +310,14 @@ export function MigrationsPage() {
                                     />
                                 </section>
                             ) : (
-                                <JobsPanel canEdit={canEdit} jobs={jobs} onRefresh={loadAll} />
+                                <JobsPanel
+                                    canEdit={canEdit}
+                                    jobs={jobs}
+                                    offset={jobsOffset}
+                                    hasMore={jobsHasMore}
+                                    onOffsetChange={setJobsOffset}
+                                    onRefresh={loadAll}
+                                />
                             )
                         )}
                         {activeTab === "history" && !tabErrors.history && (

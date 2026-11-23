@@ -289,6 +289,12 @@ export function InteractiveYuzuki({ variant, defaultMood = "idle" }: Interactive
                             alt=""
                             aria-hidden="true"
                             draggable={false}
+                            decoding="async"
+                            loading={
+                                activeMood === sprite.mood || sprite.mood === "idle"
+                                    ? "eager"
+                                    : "lazy"
+                            }
                             className={`yuzuki-sprite ${activeMood === sprite.mood ? "is-active" : ""}`}
                         />
                     ))}

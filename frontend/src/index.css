@@ -640,9 +640,38 @@ button.danger:hover:not(:disabled) {
 
 /* Membuat tabel & editor SQL bisa digeser ke samping di layar sempit */
 .table-scroll {
+  display: block;
   inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
   overflow-x: auto;
-  scrollbar-gutter: stable;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  padding-block-end: var(--space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) var(--surface-subtle);
+}
+
+.table-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+  background: var(--surface-subtle);
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 999px;
+  border: 2px solid var(--surface-subtle);
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
 }
 
 /* Mengatur kartu form login terpusat bertema Studio CEL */
@@ -812,6 +841,18 @@ button:disabled {
   justify-content: space-between;
   gap: var(--space-3);
   margin-block-end: var(--space-4);
+}
+
+.page-header > *,
+.stack > * {
+  min-inline-size: 0;
+}
+
+.page-header code,
+.muted code,
+.alert code,
+.docs-prose code {
+  overflow-wrap: anywhere;
 }
 
 .card > .page-header:last-child {
@@ -1009,10 +1050,12 @@ button:disabled {
 .explorer-sidebar {
   position: sticky;
   inset-block-start: var(--space-4);
+  min-inline-size: 0;
 }
 
 .explorer-content {
   min-block-size: 320px;
+  min-inline-size: 0;
 }
 
 .explorer-content h2,
@@ -1123,7 +1166,7 @@ button:disabled {
 /* Mengatur form multi-kolom dan baris checkbox di panel administrasi */
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: var(--space-3) var(--space-4);
 }
 
@@ -1154,6 +1197,31 @@ button:disabled {
   min-block-size: 32px;
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
+}
+
+.btn-inline {
+  display: inline;
+  min-block-size: auto;
+  padding: 0 4px;
+  margin-inline-start: 6px;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--blue);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.btn-inline:hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+
+.cell-wrap,
+.cell-expandable {
+  display: inline-block;
+  max-inline-size: 40ch;
+  overflow-wrap: anywhere;
 }
 
 .inline-form {
@@ -1541,12 +1609,13 @@ button:disabled {
   .topbar-nav {
     order: 3;
     flex-basis: 100%;
+    min-inline-size: 0;
   }
 
   .nav-links {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
     gap: 4px;
     padding: 3px;
     border-radius: var(--radius-sm);
@@ -1554,17 +1623,38 @@ button:disabled {
     border: 1.5px solid var(--border);
   }
 
+  .nav-links li {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  }
+
   .nav-links a {
     display: block;
     text-align: center;
     padding: 6px var(--space-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .login-stage {
+    padding-inline: var(--space-3);
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+  }
+
+  .data-table th {
     white-space: nowrap;
   }
 
   .docs-shell,
   .explorer-grid,
   .schema-col-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .docs-sidebar,

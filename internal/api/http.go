@@ -2,13 +2,27 @@ package api
 
 import (
 	"encoding/json"
+	"log"
+	"net/http"
+	"sync"
+
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/auth"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/observability"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/queue"
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/store"
-	"log"
-	"net/http"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 )
+
+type targetPoolKey struct {
+	id       int64
+	config   targetdb.Config
+	password string
+}
+
+type cachedTargetPool struct {
+	key  targetPoolKey
+	conn *targetdb.Connection
+}
 
 // API menampung seluruh dependency dan handler API
 type API struct {
@@ -24,9 +38,23 @@ type API struct {
 	jobEnqueuer   queue.JobEnqueuer
 	jobs          JobSource
 	metrics       *observability.Metrics
+	poolMu        sync.Mutex
+	targetPools   map[int64]cachedTargetPool
 }
 
 func (a *API) UseMetrics(metrics *observability.Metrics) { a.metrics = metrics }
+
+// Menutup seluruh pool koneksi PostgreSQL target yang di-cache.
+func (a *API) Close() {
+	a.poolMu.Lock()
+	pools := a.targetPools
+	a.targetPools = nil
+	a.poolMu.Unlock()
+
+	for _, item := range pools {
+		item.conn.Close()
+	}
+}
 
 // Bikin objek API baru dengan service yang dibutuhkan
 func Create(authService *auth.Service, secureCookies bool) *API {

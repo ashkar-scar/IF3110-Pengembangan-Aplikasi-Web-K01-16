@@ -5,6 +5,9 @@ import {
     testAdminTarget,
     updateAdminTarget,
 } from "../../api/admin";
+import { StatePanel } from "../StatePanel";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { ApiRequestError } from "../../types/auth";
 import type { AdminDatabaseTarget } from "../../types/admin";
 
@@ -33,6 +36,7 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
     const [testingId, setTestingId] = useState<number | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const pager = usePagedList(targets, (t) => `${t.name} ${t.driver} ${t.host} ${t.database}`);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     function resetForm() {
@@ -392,86 +396,118 @@ export function TargetsPanel({ targets, onRefresh }: TargetsPanelProps) {
             </section>
 
             <section className="card">
-                <h2>Daftar Database Target ({targets.length})</h2>
+                <div className="page-header">
+                    <h2>Daftar Database Target ({targets.length})</h2>
+                    {pager.shouldShowSearch && (
+                        <input
+                            type="search"
+                            aria-label="Cari target"
+                            placeholder="Cari target / driver / host..."
+                            value={pager.query}
+                            onChange={(e) => pager.setQuery(e.target.value)}
+                            style={{ maxInlineSize: "240px" }}
+                        />
+                    )}
+                </div>
                 {targets.length === 0 ? (
                     <p className="muted">
                         Belum ada database target yang terdaftar. Tambahkan lewat form di atas.
                     </p>
+                ) : pager.filteredTotal === 0 ? (
+                    <StatePanel
+                        variant="empty"
+                        title="Target tidak ditemukan"
+                        message={`Tidak ada target yang cocok dengan "${pager.query}".`}
+                        action={
+                            <button type="button" onClick={() => pager.setQuery("")}>
+                                Reset Pencarian
+                            </button>
+                        }
+                    />
                 ) : (
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Nama</th>
-                                    <th>Driver</th>
-                                    <th>Koneksi</th>
-                                    <th>Status</th>
-                                    <th>Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {targets.map((target) => (
-                                    <tr key={target.id}>
-                                        <td>{target.name}</td>
-                                        <td>
-                                            <code>{target.driver}</code>
-                                        </td>
-                                        <td>
-                                            {target.driver === "sqlite" ? (
-                                                <code>{target.database}</code>
-                                            ) : (
-                                                <code>
-                                                    {target.username}@{target.host}:{target.port}/
-                                                    {target.database} ({target.sslmode})
-                                                </code>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <span
-                                                className={`badge ${target.is_active ? "success" : "danger"}`}
-                                            >
-                                                {target.is_active ? "Aktif" : "Nonaktif"}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div className="action-row">
-                                                <button
-                                                    type="button"
-                                                    className="btn-sm"
-                                                    disabled={!target.is_active || testingId === target.id}
-                                                    onClick={() => handleTest(target)}
+                    <>
+                        <div className="table-scroll">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nama</th>
+                                        <th>Driver</th>
+                                        <th>Koneksi</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pager.pageItems.map((target) => (
+                                        <tr key={target.id}>
+                                            <td>{target.name}</td>
+                                            <td>
+                                                <code>{target.driver}</code>
+                                            </td>
+                                            <td>
+                                                {target.driver === "sqlite" ? (
+                                                    <code>{target.database}</code>
+                                                ) : (
+                                                    <code>
+                                                        {target.username}@{target.host}:{target.port}/
+                                                        {target.database} ({target.sslmode})
+                                                    </code>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <span
+                                                    className={`badge ${target.is_active ? "success" : "danger"}`}
                                                 >
-                                                    {testingId === target.id
-                                                        ? "Menguji..."
-                                                        : "Uji Koneksi"}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="btn-sm"
-                                                    onClick={() => {
-                                                        startEdit(target);
-                                                        window.scrollTo({ top: 0, behavior: "smooth" });
-                                                    }}
-                                                >
-                                                    Edit
-                                                </button>
-                                                {target.is_active && (
+                                                    {target.is_active ? "Aktif" : "Nonaktif"}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div className="action-row">
                                                     <button
                                                         type="button"
-                                                        className="btn-sm danger"
-                                                        disabled={isSubmitting}
-                                                        onClick={() => handleDisable(target)}
+                                                        className="btn-sm"
+                                                        disabled={!target.is_active || testingId === target.id}
+                                                        onClick={() => handleTest(target)}
                                                     >
-                                                        Nonaktifkan
+                                                        {testingId === target.id
+                                                            ? "Menguji..."
+                                                            : "Uji Koneksi"}
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="btn-sm"
+                                                        onClick={() => {
+                                                            startEdit(target);
+                                                            window.scrollTo({ top: 0, behavior: "smooth" });
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    {target.is_active && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn-sm danger"
+                                                            disabled={isSubmitting}
+                                                            onClick={() => handleDisable(target)}
+                                                        >
+                                                            Nonaktifkan
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePaginationBar
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            totalItems={pager.filteredTotal}
+                            pageSize={pager.pageSize}
+                            onPageChange={pager.setPage}
+                        />
+                    </>
                 )}
             </section>
         </div>

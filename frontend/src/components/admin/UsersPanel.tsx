@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { createAdminUser, updateAdminUser } from "../../api/admin";
 import { StatePanel } from "../StatePanel";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { ApiRequestError } from "../../types/auth";
 import type { User } from "../../types/admin";
 
@@ -18,8 +20,8 @@ export function UsersPanel({ users, onRefresh }: UsersPanelProps) {
 
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const pager = usePagedList(users, (u) => u.username, 15, 0);
 
     function resetForm() {
         setEditingId(null);
@@ -74,10 +76,6 @@ export function UsersPanel({ users, onRefresh }: UsersPanelProps) {
             setIsSubmitting(false);
         }
     }
-
-    const filteredUsers = users.filter((user) =>
-        user.username.toLowerCase().includes(searchQuery.trim().toLowerCase()),
-    );
 
     return (
         <div className="stack">
@@ -172,8 +170,8 @@ export function UsersPanel({ users, onRefresh }: UsersPanelProps) {
                             type="search"
                             aria-label="Cari username"
                             placeholder="Cari username..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            value={pager.query}
+                            onChange={(e) => pager.setQuery(e.target.value)}
                             style={{ maxInlineSize: "240px" }}
                         />
                     )}
@@ -185,60 +183,69 @@ export function UsersPanel({ users, onRefresh }: UsersPanelProps) {
                         title="Belum ada user"
                         message="Tambahkan user pertama melalui form di atas."
                     />
-                ) : filteredUsers.length === 0 ? (
+                ) : pager.filteredTotal === 0 ? (
                     <StatePanel
                         variant="empty"
                         title="User tidak ditemukan"
-                        message={`Tidak ada username yang cocok dengan "${searchQuery}".`}
+                        message={`Tidak ada username yang cocok dengan "${pager.query}".`}
                         action={
-                            <button type="button" onClick={() => setSearchQuery("")}>
+                            <button type="button" onClick={() => pager.setQuery("")}>
                                 Reset Pencarian
                             </button>
                         }
                     />
                 ) : (
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Role</th>
-                                    <th>Status</th>
-                                    <th>Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredUsers.map((user) => (
-                                    <tr key={user.id}>
-                                        <td>{user.username}</td>
-                                        <td>
-                                            <span
-                                                className={`badge ${user.is_platform_admin ? "info" : ""}`}
-                                            >
-                                                {user.is_platform_admin ? "Admin" : "User"}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span
-                                                className={`badge ${user.is_active ? "success" : "danger"}`}
-                                            >
-                                                {user.is_active ? "Aktif" : "Nonaktif"}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <button
-                                                type="button"
-                                                className="btn-sm"
-                                                onClick={() => startEdit(user)}
-                                            >
-                                                Edit
-                                            </button>
-                                        </td>
+                    <>
+                        <div className="table-scroll">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    {pager.pageItems.map((user) => (
+                                        <tr key={user.id}>
+                                            <td>{user.username}</td>
+                                            <td>
+                                                <span
+                                                    className={`badge ${user.is_platform_admin ? "info" : ""}`}
+                                                >
+                                                    {user.is_platform_admin ? "Admin" : "User"}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span
+                                                    className={`badge ${user.is_active ? "success" : "danger"}`}
+                                                >
+                                                    {user.is_active ? "Aktif" : "Nonaktif"}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    type="button"
+                                                    className="btn-sm"
+                                                    onClick={() => startEdit(user)}
+                                                >
+                                                    Edit
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePaginationBar
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            totalItems={pager.filteredTotal}
+                            pageSize={pager.pageSize}
+                            onPageChange={pager.setPage}
+                        />
+                    </>
                 )}
             </section>
         </div>

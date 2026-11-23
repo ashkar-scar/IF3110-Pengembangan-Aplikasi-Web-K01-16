@@ -9,6 +9,9 @@ import type {
     PlanNode,
 } from "../../types/migration";
 import type { GeneratedDraftSql } from "../../utils/sqlBuilder";
+import { StatePanel } from "../StatePanel";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { SchemaBuilder } from "./SchemaBuilder";
 
 interface DraftsPanelProps {
@@ -66,6 +69,10 @@ export function DraftsPanel({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const pager = usePagedList(
+        drafts,
+        (d) => `${d.id} ${d.description} ${d.execution_mode} ${d.is_locked ? "terkunci" : "draft"}`,
+    );
 
     function resetEditor() {
         setSelectedDraftId(null);
@@ -402,69 +409,101 @@ export function DraftsPanel({
             )}
 
             <section className="card">
-                <h2>Daftar Draft ({drafts.length})</h2>
+                <div className="page-header">
+                    <h2>Daftar Draft ({drafts.length})</h2>
+                    {pager.shouldShowSearch && (
+                        <input
+                            type="search"
+                            aria-label="Cari draft"
+                            placeholder="Cari draft..."
+                            value={pager.query}
+                            onChange={(e) => pager.setQuery(e.target.value)}
+                            style={{ maxInlineSize: "240px" }}
+                        />
+                    )}
+                </div>
                 {drafts.length === 0 ? (
                     <p className="muted">Belum ada draft migration pada target ini.</p>
+                ) : pager.filteredTotal === 0 ? (
+                    <StatePanel
+                        variant="empty"
+                        title="Draft tidak ditemukan"
+                        message={`Tidak ada draft yang cocok dengan "${pager.query}".`}
+                        action={
+                            <button type="button" onClick={() => pager.setQuery("")}>
+                                Reset Pencarian
+                            </button>
+                        }
+                    />
                 ) : (
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Deskripsi</th>
-                                    <th>Mode</th>
-                                    <th>Status</th>
-                                    <th>Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {drafts.map((draft) => (
-                                    <tr key={draft.id}>
-                                        <td>
-                                            #{draft.id} r{draft.revision}
-                                        </td>
-                                        <td>
-                                            <div>{draft.description}</div>
-                                            {draft.is_irreversible && (
-                                                <span className="badge danger">Irreversible</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <code>{draft.execution_mode}</code>
-                                        </td>
-                                        <td>
-                                            <span
-                                                className={`badge ${draft.is_locked ? "warning" : "info"}`}
-                                            >
-                                                {draft.is_locked ? "Terkunci" : "Draft"}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div className="action-row">
-                                                <button
-                                                    type="button"
-                                                    className="btn-sm"
-                                                    onClick={() => openDraft(draft)}
+                    <>
+                        <div className="table-scroll">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Deskripsi</th>
+                                        <th>Mode</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pager.pageItems.map((draft) => (
+                                        <tr key={draft.id}>
+                                            <td>
+                                                #{draft.id} r{draft.revision}
+                                            </td>
+                                            <td>
+                                                <div className="cell-wrap">{draft.description}</div>
+                                                {draft.is_irreversible && (
+                                                    <span className="badge danger">Irreversible</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <code>{draft.execution_mode}</code>
+                                            </td>
+                                            <td>
+                                                <span
+                                                    className={`badge ${draft.is_locked ? "warning" : "info"}`}
                                                 >
-                                                    {draft.is_locked || !canEdit ? "Lihat" : "Edit"}
-                                                </button>
-                                                {canEdit && !draft.is_locked && (
+                                                    {draft.is_locked ? "Terkunci" : "Draft"}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div className="action-row">
                                                     <button
                                                         type="button"
-                                                        className="btn-sm primary"
-                                                        disabled={isSubmitting}
-                                                        onClick={() => handleSubmitReview(draft.id)}
+                                                        className="btn-sm"
+                                                        onClick={() => openDraft(draft)}
                                                     >
-                                                        Ajukan Review
+                                                        {draft.is_locked || !canEdit ? "Lihat" : "Edit"}
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                                    {canEdit && !draft.is_locked && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn-sm primary"
+                                                            disabled={isSubmitting}
+                                                            onClick={() => handleSubmitReview(draft.id)}
+                                                        >
+                                                            Ajukan Review
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePaginationBar
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            totalItems={pager.filteredTotal}
+                            pageSize={pager.pageSize}
+                            onPageChange={pager.setPage}
+                        />
+                    </>
                 )}
             </section>
         </div>

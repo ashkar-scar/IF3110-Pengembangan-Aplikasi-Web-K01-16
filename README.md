@@ -83,31 +83,31 @@ Konfigurasi uji: `cmd/server` + `cmd/worker` (`WORKER_CONCURRENCY=4`), PostgreSQ
 
 | Tingkat Beban | Rentang & VU (`API + Job`) | API `p50` | API `p95` | API `req/s` | API Error | Queue Wait `p50` / `p95` | Job Dur `p50` / `p95` | Job Selesai (`Job/s`) | Job Succ | OCC Fail | Sys Err |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `1_normal` (Normal) | `0-20s` (`4 + 2 = 6`) | `54.21 ms` | `134.07 ms` | `22.95` | `0.00%` | `242.00 / 562.20 ms` | `197.00 / 603.60 ms` | `35` (`1.75`) | `100.00%` | `0.00%` | `0.00%` |
-| `2_stress` (Meningkat) | `20-45s` (`12 + 5 = 17`) | `350.42 ms` | `865.80 ms` | `24.12` | `0.00%` | `505.00 / 1006.90 ms` | `212.00 / 269.90 ms` | `39` (`1.56`) | `71.79%` | `28.21%` | `0.00%` |
-| `3_peak` (Peak Stress) | `45-70s` (`28 + 8 = 36`) | `1558.91 ms` | `2433.15 ms` | `18.00` | `0.00%` | `775.00 / 1230.85 ms` | `183.50 / 207.75 ms` | `22` (`0.88`) | `63.64%` | `36.36%` | `0.00%` |
-| `4_cooldown` (Ramp Down) | `70-78s` (`36 -> 6`) | `996.87 ms` | `2042.87 ms` | `8.88` | `0.00%` | `820.50 / 1063.45 ms` | `151.50 / 181.55 ms` | `4` (`0.50`) | `75.00%` | `25.00%` | `0.00%` |
-| `5_recovery` (Pemulihan) | `78-103s` (`4 + 2 = 6`) | `208.08 ms` | `485.63 ms` | `11.76` | `0.00%` | `273.00 / 758.10 ms` | `172.50 / 199.75 ms` | `22` (`0.88`) | `100.00%` | `0.00%` | `0.00%` |
+| `1_normal` (Normal) | `0-20s` (`4 + 2 = 6`) | `46.30 ms` | `121.19 ms` | `24.65` | `0.00%` | `322.00 / 535.00 ms` | `159.00 / 959.20 ms` | `33` (`1.65`) | `100.00%` | `0.00%` | `0.00%` |
+| `2_stress` (Meningkat) | `20-45s` (`12 + 5 = 17`) | `152.13 ms` | `363.73 ms` | `42.08` | `0.00%` | `307.50 / 791.30 ms` | `197.50 / 299.80 ms` | `60` (`2.40`) | `71.67%` | `28.33%` | `0.00%` |
+| `3_peak` (Peak Stress) | `45-70s` (`28 + 8 = 36`) | `326.84 ms` | `565.78 ms` | `62.28` | `0.00%` | `304.00 / 823.00 ms` | `150.00 / 266.00 ms` | `61` (`2.44`) | `63.93%` | `36.07%` | `0.00%` |
+| `4_cooldown` (Ramp Down) | `70-78s` (`36 -> 6`) | `163.43 ms` | `450.00 ms` | `53.13` | `0.00%` | `457.00 / 859.00 ms` | `148.00 / 253.00 ms` | `21` (`2.63`) | `66.67%` | `33.33%` | `0.00%` |
+| `5_recovery` (Pemulihan) | `78-103s` (`4 + 2 = 6`) | `54.11 ms` | `134.90 ms` | `23.64` | `0.00%` | `208.00 / 449.30 ms` | `166.00 / 249.80 ms` | `43` (`1.72`) | `100.00%` | `0.00%` | `0.00%` |
 
 Perbandingan `same_db` vs `diff_db` pada setiap tingkat beban:
 
 | Tingkat Beban | `same_db` Jobs | `same_db` Succ | `same_db` QWait (`p50 / p95`) | `diff_db` Jobs | `diff_db` Succ | `diff_db` QWait (`p50 / p95`) |
 | --- | --- | --- | --- | --- | --- | --- |
-| `1_normal` | `18` | `100.00%` | `258.50 / 562.50 ms` | `17` | `100.00%` | `242.00 / 487.20 ms` |
-| `2_stress` | `19` | `42.11%` | `473.00 / 1006.90 ms` | `20` | `100.00%` | `534.00 / 940.50 ms` |
-| `3_peak` | `11` | `27.27%` | `756.00 / 1229.50 ms` | `11` | `100.00%` | `795.00 / 1137.00 ms` |
-| `4_cooldown` | `2` | `50.00%` | `635.50 / 672.85 ms` | `2` | `100.00%` | `1022.50 / 1075.15 ms` |
-| `5_recovery` | `11` | `100.00%` | `233.00 / 701.00 ms` | `11` | `100.00%` | `369.00 / 638.50 ms` |
+| `1_normal` | `17` | `100.00%` | `282.00 / 399.40 ms` | `16` | `100.00%` | `361.00 / 681.00 ms` |
+| `2_stress` | `30` | `43.33%` | `338.50 / 777.40 ms` | `30` | `100.00%` | `280.00 / 781.35 ms` |
+| `3_peak` | `30` | `26.67%` | `307.50 / 800.85 ms` | `31` | `100.00%` | `280.00 / 825.00 ms` |
+| `4_cooldown` | `11` | `36.36%` | `457.00 / 927.00 ms` | `10` | `100.00%` | `434.00 / 791.75 ms` |
+| `5_recovery` | `21` | `100.00%` | `207.00 / 451.00 ms` | `22` | `100.00%` | `212.50 / 432.55 ms` |
 
-Ringkasan global: `2683` total HTTP request (`25.10 req/s`), `api_read` `p50 = 316.24 ms` / `p95 = 2072.17 ms`, `api_all` `p50 = 317.86 ms` / `p95 = 2089.86 ms`, `api_error_rate = 0.00%`, `job_enqueue_accepted = 100.00%`, `job_exec_success = 83.61%`, `job_system_error = 0.00%`, dan **seluruh 8 threshold k6 berstatus PASS**.
+Ringkasan global: `5582` total HTTP request (`51.65 req/s`), `api_read` `p50 = 152.12 ms` / `p95 = 495.23 ms`, `api_all` `p50 = 154.72 ms` / `p95 = 505.65 ms`, `api_error_rate = 0.00%`, `job_enqueue_accepted = 100.00%`, `job_exec_success = 78.90%`, `job_system_error = 0.00%`, dan **seluruh 8 threshold k6 berstatus PASS**.
 
 ### Analisis per Tingkat Beban
 
-1. **`1_normal` (`6 VUs`: `4 API + 2 Migration`)**: Sistem berada jauh di bawah batas kapasitas. API merespons sangat cepat (`p50 = 54.21 ms`, `p95 = 134.07 ms`) dengan `0.00%` error, serta seluruh `35` job (`same_db` maupun `diff_db`) selesai `100.00%` karena hampir tidak terjadi tumpang-tindih pengiriman ke `Demo Sales`.
-2. **`2_stress` (`17 VUs`: `12 API + 5 Migration`, ~2.8x beban normal)**: Throughput API masih naik sedikit (`24.12 req/s`), namun `p95` melonjak menjadi `865.80 ms` dan waktu tunggu queue `p50` berlipat dua menjadi `505.00 ms`. Pada fase ini perbedaan arsitektur terlihat jelas: `diff_db` tetap `100.00%` sukses karena 4 worker mengeksekusi target berbeda secara paralel, sedangkan pada `same_db` hanya `42.11%` job yang sukses karena beberapa request berversi awal sama masuk ke antrean hampir bersamaan (semuanya mendapat `202 Accepted` saat `enqueue`, lalu yang kalah balapan ditolak worker dengan `versi database telah berubah`).
-3. **`3_peak` (`36 VUs`: `28 API + 8 Migration`, 6x beban normal)**: Sistem mencapai titik saturasi. Throughput API turun menjadi `18.00 req/s` dan latensi naik ke `p50 = 1558.91 ms` / `p95 = 2433.15 ms`, sementara queue wait `p95` naik ke `1230.85 ms`. Penyebab utamanya adalah pembukaan koneksi target baru di setiap request Explorer (`targetdb.OpenPostgres` tanpa pool persisten antar-request), kueri izin N+1 pada `GET /api/databases`, serta serialisasi kunci per-target pada worker. Meski jenuh, API tidak mengembalikan error (`0.00%`) dan `diff_db` tetap `100.00%` sukses.
-4. **`4_cooldown` (`8s` ramp down `36 -> 6 VUs`)**: Sisa request dan antrean dari fase puncak dikuras. Latensi `p95` mulai turun (`2433.15 ms -> 2042.87 ms`) dan `API error rate` tetap `0.00%`.
-5. **`5_recovery` (`6 VUs`: `4 API + 2 Migration`)**: Setelah antrean terkuras, sistem pulih tanpa perlu restart: API `p95` turun drastis `80.0%` dari puncak menjadi `485.63 ms` (`p50 = 208.08 ms`, `api_read p95 = 497.48 ms`), `queue_wait p50` kembali normal ke `273.00 ms`, dan tingkat keberhasilan eksekusi migration kembali menjadi `100.00%` baik pada `same_db` maupun `diff_db`. Sedikit sisa selisih dibanding kondisi dingin (`134.07 ms -> 485.63 ms`) dipicu oleh overhead penulisan log SQL terstruktur dan ekspor trace/log OTLP pasca-lonjakan beban.
+1. **`1_normal` (`6 VUs`: `4 API + 2 Migration`)**: Sistem berada jauh di bawah batas kapasitas. API merespons cepat (`p50 = 46.30 ms`, `p95 = 121.19 ms`) dengan `0.00%` error, serta seluruh `33` job (`same_db` maupun `diff_db`) selesai `100.00%` karena hampir tidak terjadi tumpang-tindih pengiriman ke `Demo Sales`.
+2. **`2_stress` (`17 VUs`: `12 API + 5 Migration`, ~2.8x beban normal)**: Throughput API tumbuh proporsional menjadi `42.08 req/s` dengan latensi masih terkendali (`p50 = 152.13 ms`, `p95 = 363.73 ms`). Pada fase ini perbedaan arsitektur terlihat jelas: `diff_db` tetap `100.00%` sukses karena 4 worker mengeksekusi target berbeda secara paralel, sedangkan pada `same_db` hanya `43.33%` job yang sukses karena beberapa request berversi awal sama masuk ke antrean hampir bersamaan (semuanya mendapat `202 Accepted` saat `enqueue`, lalu yang kalah balapan ditolak worker dengan `versi database telah berubah`).
+3. **`3_peak` (`36 VUs`: `28 API + 8 Migration`, 6x beban normal)**: Dengan pemakaian ulang pool target PostgreSQL (`openShared`) dan pemetaan permission batch pada `GET /api/databases`, API tetap mampu mendorong throughput hingga `62.28 req/s` dengan `p50 = 326.84 ms` / `p95 = 565.78 ms` dan `0.00%` error. Titik batas utama berada pada kontensi OCC dan serialisasi target lock pada `same_db` (`26.67%` sukses), sedangkan `diff_db` tetap `100.00%` sukses (`31` job) dengan queue wait yang stabil (`p50 = 280.00 ms`).
+4. **`4_cooldown` (`8s` ramp down `36 -> 6 VUs`)**: Sisa antrean dari fase puncak langsung terkuras cepat. Throughput perlahan turun ke `53.13 req/s`, latensi `p95` turun menjadi `450.00 ms`, dan `API error rate` tetap `0.00%`.
+5. **`5_recovery` (`6 VUs`: `4 API + 2 Migration`)**: Sistem pulih sepenuhnya tanpa perlu restart: latensi API kembali menyamai kondisi baseline (`p50 = 54.11 ms`, `p95 = 134.90 ms`), `queue_wait p50` turun ke `208.00 ms`, dan keberhasilan eksekusi migration kembali `100.00%` baik pada `same_db` (`21/21`) maupun `diff_db` (`22/22`).
 
 ## CodeQL SAST
 

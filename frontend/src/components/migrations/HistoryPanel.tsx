@@ -21,6 +21,13 @@ function attemptBadgeClass(status: HistoryAttempt["status"]) {
     return "badge info";
 }
 
+function attemptVersionLabel(attempt: HistoryAttempt) {
+    if (attempt.version !== null) return `v${attempt.version}`;
+    if (attempt.batch_no != null) return `Batch #${attempt.batch_no}`;
+    if (attempt.action_type === "CANCEL_BATCH") return "Pembatalan Batch";
+    return "(tanpa versi)";
+}
+
 export function HistoryPanel({
     targetId,
     canEdit,
@@ -30,6 +37,7 @@ export function HistoryPanel({
     onFilterChange,
     onSubmittedReview,
 }: HistoryPanelProps) {
+    const [hideBatchLogs, setHideBatchLogs] = useState(true);
     const [busyExecId, setBusyExecId] = useState<string | null>(null);
     const [error, setError] = useState("");
 
@@ -60,6 +68,10 @@ export function HistoryPanel({
     }
 
     const attempts = history?.history ?? history?.attempts ?? [];
+    const batchLogCount = attempts.filter((attempt) => attempt.batch_no != null).length;
+    const visibleAttempts = hideBatchLogs
+        ? attempts.filter((attempt) => attempt.batch_no == null)
+        : attempts;
 
     return (
         <div className="stack">
@@ -72,14 +84,25 @@ export function HistoryPanel({
                         </p>
                     </div>
 
-                    <label className="checkbox-inline">
-                        <input
-                            type="checkbox"
-                            checked={hideRollback}
-                            onChange={(e) => onFilterChange(e.target.checked, 0)}
-                        />
-                        Sembunyikan yang sudah di-rollback
-                    </label>
+                    <div className="action-row">
+                        <label className="checkbox-inline">
+                            <input
+                                type="checkbox"
+                                checked={hideBatchLogs}
+                                onChange={(e) => setHideBatchLogs(e.target.checked)}
+                            />
+                            Sembunyikan log per-batch
+                            {batchLogCount > 0 ? ` (${batchLogCount})` : ""}
+                        </label>
+                        <label className="checkbox-inline">
+                            <input
+                                type="checkbox"
+                                checked={hideRollback}
+                                onChange={(e) => onFilterChange(e.target.checked, 0)}
+                            />
+                            Sembunyikan yang sudah di-rollback
+                        </label>
+                    </div>
                 </div>
 
                 {error && (
@@ -92,100 +115,120 @@ export function HistoryPanel({
                     <p className="muted">Belum ada riwayat eksekusi pada target ini.</p>
                 ) : (
                     <>
-                        <div className="table-scroll">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Versi / ID</th>
-                                        <th>Aksi</th>
-                                        <th>Deskripsi & SQL</th>
-                                        <th>Eksekutor</th>
-                                        <th>Status</th>
-                                        <th>Aksi Linear</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {attempts.map((attempt) => {
-                                        const canRollback =
-                                            canEdit && history?.can_rollback_exec_id === attempt.id;
-                                        const canForward =
-                                            canEdit && history?.can_forward_exec_id === attempt.id;
+                        {visibleAttempts.length === 0 ? (
+                            <p className="muted">
+                                Semua {attempts.length} entri pada halaman ini merupakan log
+                                per-batch; matikan &quot;Sembunyikan log per-batch&quot; untuk
+                                melihat detailnya.
+                            </p>
+                        ) : (
+                            <div className="table-scroll">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Versi / ID</th>
+                                            <th>Aksi</th>
+                                            <th>Deskripsi & SQL</th>
+                                            <th>Eksekutor</th>
+                                            <th>Status</th>
+                                            <th>Aksi Linear</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {visibleAttempts.map((attempt) => {
+                                            const canRollback =
+                                                canEdit &&
+                                                history?.can_rollback_exec_id === attempt.id;
+                                            const canForward =
+                                                canEdit &&
+                                                history?.can_forward_exec_id === attempt.id;
 
-                                        return (
-                                            <tr key={attempt.id}>
-                                                <td>
-                                                    <div>
-                                                        {attempt.version !== null
-                                                            ? `v${attempt.version}`
-                                                            : "(tanpa versi)"}
-                                                    </div>
-                                                    <code className="muted">{attempt.id}</code>
-                                                </td>
-                                                <td>
-                                                    <code>{attempt.action_type}</code>
-                                                </td>
-                                                <td>
-                                                    <div>{attempt.description}</div>
-                                                    {attempt.error && (
-                                                        <p className="alert error">{attempt.error}</p>
-                                                    )}
-                                                    <details className="details-box">
-                                                        <summary>Lihat SQL</summary>
-                                                        <pre className="sql-preview">
-                                                            {attempt.sql}
-                                                        </pre>
-                                                    </details>
-                                                </td>
-                                                <td>{attempt.actor_name}</td>
-                                                <td>
-                                                    <span className={attemptBadgeClass(attempt.status)}>
-                                                        {attempt.status}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <div className="action-row">
-                                                        {canRollback && (
-                                                            <button
-                                                                type="button"
-                                                                className="btn-sm"
-                                                                disabled={busyExecId === attempt.id}
-                                                                onClick={() =>
-                                                                    handleAction(
-                                                                        "rollback",
-                                                                        attempt.id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                Ajukan Rollback
-                                                            </button>
+                                            return (
+                                                <tr key={attempt.id}>
+                                                    <td>
+                                                        <div>{attemptVersionLabel(attempt)}</div>
+                                                        <code className="muted">{attempt.id}</code>
+                                                    </td>
+                                                    <td>
+                                                        <code>{attempt.action_type}</code>
+                                                    </td>
+                                                    <td>
+                                                        <div>{attempt.description}</div>
+                                                        {attempt.error && (
+                                                            <p className="alert error">
+                                                                {attempt.error}
+                                                            </p>
                                                         )}
-                                                        {canForward && (
-                                                            <button
-                                                                type="button"
-                                                                className="btn-sm primary"
-                                                                disabled={busyExecId === attempt.id}
-                                                                onClick={() =>
-                                                                    handleAction(
-                                                                        "forward",
-                                                                        attempt.id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                Ajukan Forward
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                                        <details className="details-box">
+                                                            <summary>Lihat SQL</summary>
+                                                            <pre className="sql-preview">
+                                                                {attempt.sql}
+                                                            </pre>
+                                                        </details>
+                                                    </td>
+                                                    <td>{attempt.actor_name}</td>
+                                                    <td>
+                                                        <span
+                                                            className={attemptBadgeClass(
+                                                                attempt.status,
+                                                            )}
+                                                        >
+                                                            {attempt.status}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div className="action-row">
+                                                            {canRollback && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-sm"
+                                                                    disabled={
+                                                                        busyExecId === attempt.id
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleAction(
+                                                                            "rollback",
+                                                                            attempt.id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Ajukan Rollback
+                                                                </button>
+                                                            )}
+                                                            {canForward && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-sm primary"
+                                                                    disabled={
+                                                                        busyExecId === attempt.id
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleAction(
+                                                                            "forward",
+                                                                            attempt.id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Ajukan Forward
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
 
                         <div className="pagination-bar">
                             <span className="muted">
-                                Menampilkan {attempts.length} entri mulai offset {offset}
+                                Menampilkan {visibleAttempts.length}
+                                {visibleAttempts.length !== attempts.length
+                                    ? ` dari ${attempts.length}`
+                                    : ""}{" "}
+                                entri mulai offset {offset}
                             </span>
                             <div className="action-row">
                                 <button

@@ -8,6 +8,8 @@ import {
     renameAdminGroup,
     setGroupLeader,
 } from "../../api/admin";
+import { TablePaginationBar } from "../TablePager";
+import { usePagedList } from "../../utils/usePagedList";
 import { ApiRequestError } from "../../types/auth";
 import type { Group, User } from "../../types/admin";
 
@@ -32,6 +34,7 @@ export function GroupsPanel({ groups, users, onRefresh }: GroupsPanelProps) {
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const membersPager = usePagedList(members, (m) => m.username);
 
     // Memilih group pertama secara default kalau belum ada yang dipilih atau group lama baru dihapus.
     const selectedGroup = groups.find((g) => g.id === selectedGroupId) ?? groups[0] ?? null;
@@ -370,37 +373,46 @@ export function GroupsPanel({ groups, users, onRefresh }: GroupsPanelProps) {
                             ) : members.length === 0 ? (
                                 <p className="muted">Group ini belum punya anggota.</p>
                             ) : (
-                                <div className="table-scroll">
-                                    <table className="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Username</th>
-                                                <th>Role</th>
-                                                <th>Aksi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {members.map((member) => (
-                                                <tr key={member.id}>
-                                                    <td>{member.username}</td>
-                                                    <td>
-                                                        {member.is_platform_admin ? "Admin" : "User"}
-                                                    </td>
-                                                    <td>
-                                                        <button
-                                                            type="button"
-                                                            className="btn-sm"
-                                                            disabled={isSubmitting}
-                                                            onClick={() => handleRemoveMember(member)}
-                                                        >
-                                                            Keluarkan
-                                                        </button>
-                                                    </td>
+                                <>
+                                    <div className="table-scroll">
+                                        <table className="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Username</th>
+                                                    <th>Role</th>
+                                                    <th>Aksi</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {membersPager.pageItems.map((member) => (
+                                                    <tr key={member.id}>
+                                                        <td>{member.username}</td>
+                                                        <td>
+                                                            {member.is_platform_admin ? "Admin" : "User"}
+                                                        </td>
+                                                        <td>
+                                                            <button
+                                                                type="button"
+                                                                className="btn-sm"
+                                                                disabled={isSubmitting}
+                                                                onClick={() => handleRemoveMember(member)}
+                                                            >
+                                                                Keluarkan
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <TablePaginationBar
+                                        page={membersPager.page}
+                                        totalPages={membersPager.totalPages}
+                                        totalItems={membersPager.filteredTotal}
+                                        pageSize={membersPager.pageSize}
+                                        onPageChange={membersPager.setPage}
+                                    />
+                                </>
                             )}
                         </div>
                     )}
