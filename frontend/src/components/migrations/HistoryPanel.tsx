@@ -2,6 +2,8 @@ import { useState } from "react";
 import { submitForward, submitRollback } from "../../api/migrations";
 import { ApiRequestError } from "../../types/auth";
 import type { HistoryAttempt, HistoryResponse } from "../../types/migration";
+import { usePagedList } from "../../utils/usePagedList";
+import { TablePaginationBar } from "../TablePager";
 
 const HISTORY_PAGE_SIZE = 200;
 
@@ -73,9 +75,17 @@ export function HistoryPanel({
         ? attempts.filter((attempt) => attempt.batch_no == null)
         : attempts;
 
+    const pagedAttempts = usePagedList(
+        visibleAttempts,
+        (attempt) =>
+            `${attemptVersionLabel(attempt)} ${attempt.id} ${attempt.action_type} ${attempt.description} ${attempt.actor_name} ${attempt.status} ${attempt.error}`,
+        15,
+        10,
+    );
+
     return (
         <div className="stack">
-            <section className="card">
+            <section className="card stack">
                 <div className="page-header">
                     <div>
                         <h2>Riwayat Eksekusi (Append-Only)</h2>
@@ -111,6 +121,18 @@ export function HistoryPanel({
                     </p>
                 )}
 
+                {pagedAttempts.shouldShowSearch && (
+                    <div className="table-toolbar">
+                        <input
+                            type="search"
+                            aria-label="Cari riwayat eksekusi"
+                            placeholder="Filter versi, ID eksekusi, aksi, deskripsi, atau status..."
+                            value={pagedAttempts.query}
+                            onChange={(e) => pagedAttempts.setQuery(e.target.value)}
+                        />
+                    </div>
+                )}
+
                 {attempts.length === 0 ? (
                     <p className="muted">Belum ada riwayat eksekusi pada target ini.</p>
                 ) : (
@@ -120,6 +142,10 @@ export function HistoryPanel({
                                 Semua {attempts.length} entri pada halaman ini merupakan log
                                 per-batch; matikan &quot;Sembunyikan log per-batch&quot; untuk
                                 melihat detailnya.
+                            </p>
+                        ) : pagedAttempts.pageItems.length === 0 ? (
+                            <p className="muted">
+                                Tidak ada riwayat yang cocok dengan filter pencarian.
                             </p>
                         ) : (
                             <div className="table-scroll">
@@ -135,7 +161,7 @@ export function HistoryPanel({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {visibleAttempts.map((attempt) => {
+                                        {pagedAttempts.pageItems.map((attempt) => {
                                             const canRollback =
                                                 canEdit &&
                                                 history?.can_rollback_exec_id === attempt.id;
@@ -222,38 +248,26 @@ export function HistoryPanel({
                             </div>
                         )}
 
-                        <div className="pagination-bar">
-                            <span className="muted">
-                                Menampilkan {visibleAttempts.length}
-                                {visibleAttempts.length !== attempts.length
-                                    ? ` dari ${attempts.length}`
-                                    : ""}{" "}
-                                entri mulai offset {offset}
-                            </span>
-                            <div className="action-row">
-                                <button
-                                    type="button"
-                                    disabled={offset === 0}
-                                    onClick={() =>
-                                        onFilterChange(
-                                            hideRollback,
-                                            Math.max(offset - HISTORY_PAGE_SIZE, 0),
-                                        )
-                                    }
-                                >
-                                    Sebelumnya
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={!history?.has_more}
-                                    onClick={() =>
-                                        onFilterChange(hideRollback, offset + attempts.length)
-                                    }
-                                >
-                                    Berikutnya
-                                </button>
-                            </div>
-                        </div>
+                        <TablePaginationBar
+                            page={pagedAttempts.page}
+                            totalPages={pagedAttempts.totalPages}
+                            totalItems={pagedAttempts.filteredTotal}
+                            pageSize={pagedAttempts.pageSize}
+                            onPageChange={pagedAttempts.setPage}
+                            serverOffset={offset}
+                            hasMoreServer={Boolean(history?.has_more)}
+                            onServerPrev={() => {
+                                pagedAttempts.setPage(0);
+                                onFilterChange(
+                                    hideRollback,
+                                    Math.max(offset - HISTORY_PAGE_SIZE, 0),
+                                );
+                            }}
+                            onServerNext={() => {
+                                pagedAttempts.setPage(0);
+                                onFilterChange(hideRollback, offset + attempts.length);
+                            }}
+                        />
                     </>
                 )}
             </section>
