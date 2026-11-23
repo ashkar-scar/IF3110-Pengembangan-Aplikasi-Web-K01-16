@@ -108,3 +108,39 @@ Ringkasan global: `2683` total HTTP request (`25.10 req/s`), `api_read` `p50 = 3
 3. **`3_peak` (`36 VUs`: `28 API + 8 Migration`, 6x beban normal)**: Sistem mencapai titik saturasi. Throughput API turun menjadi `18.00 req/s` dan latensi naik ke `p50 = 1558.91 ms` / `p95 = 2433.15 ms`, sementara queue wait `p95` naik ke `1230.85 ms`. Penyebab utamanya adalah pembukaan koneksi target baru di setiap request Explorer (`targetdb.OpenPostgres` tanpa pool persisten antar-request), kueri izin N+1 pada `GET /api/databases`, serta serialisasi kunci per-target pada worker. Meski jenuh, API tidak mengembalikan error (`0.00%`) dan `diff_db` tetap `100.00%` sukses.
 4. **`4_cooldown` (`8s` ramp down `36 -> 6 VUs`)**: Sisa request dan antrean dari fase puncak dikuras. Latensi `p95` mulai turun (`2433.15 ms -> 2042.87 ms`) dan `API error rate` tetap `0.00%`.
 5. **`5_recovery` (`6 VUs`: `4 API + 2 Migration`)**: Setelah antrean terkuras, sistem pulih tanpa perlu restart: API `p95` turun drastis `80.0%` dari puncak menjadi `485.63 ms` (`p50 = 208.08 ms`, `api_read p95 = 497.48 ms`), `queue_wait p50` kembali normal ke `273.00 ms`, dan tingkat keberhasilan eksekusi migration kembali menjadi `100.00%` baik pada `same_db` maupun `diff_db`. Sedikit sisa selisih dibanding kondisi dingin (`134.07 ms -> 485.63 ms`) dipicu oleh overhead penulisan log SQL terstruktur dan ekspor trace/log OTLP pasca-lonjakan beban.
+
+## CodeQL SAST
+
+CodeQL dikonfigurasi melalui [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) untuk menganalisis kode Go dan JavaScript/TypeScript. Workflow berjalan pada pull request menuju `main`, push ke `main`
+
+### History CodeQL Scan
+
+| Tanggal (WIB) | Action | Branch/commit | Hasil | Bukti |
+| --- | --- | --- | --- | --- |
+| 22 Nov 2026 | Pull request | `feat/draft_migration` / `fd32a17` | Success | [Run 45003876597](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45003876597) |
+| 22 Nov 2026 | Push ke `main` | `1b8bace` | Success | [Run 45004325525](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45004325525) |
+| 22 Nov 2026 | Pull request | `feat/spa-frontend` / `6d0d6ee` | Success | [Run 45024465923](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45024465923) |
+| 22 Nov 2026 | Push ke `main` | `ce34a85` | Success | [Run 45024558568](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45024558568) |
+| 22 Nov 2026 | Pull request | `feat/worker` / `55ea3c7` | Success | [Run 45028920628](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45028920628) |
+| 22 Nov 2026 | Pull request | `feat/worker` / `9dc152c` | Success | [Run 45031008601](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45031008601) |
+| 22 Nov 2026 | Push ke `main` | `a3dd1a1` | Success | [Run 45031021359](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45031021359) |
+| 22 Nov 2026 | Pull request | `feat/spa-frontend` / `f9725e3` | Success | [Run 45035985409](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45035985409) |
+| 22 Nov 2026 | Push ke `main` | `c1c97f2` | Success | [Run 45036173107](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45036173107) |
+| 23 Nov 2026 | Pull request | `feat/spa-frontend` / `f3ff65b` | Success | [Run 45060367748](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45060367748) |
+| 23 Nov 2026 | Pull request | `feat/spa-frontend` / `f3629e6` | Success | [Run 45061001306](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45061001306) |
+| 23 Nov 2026 | Pull request | `feat/spa-frontend` / `24c30b5` | Success | [Run 45062716805](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45062716805) |
+| 23 Nov 2026 | Push ke `main` | `6b07bf3` | Success | [Run 45063104964](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45063104964) |
+| 23 Nov 2026 | Pull request | `fix/draft_migration` / `27a8b62` | Success | [Run 45102403746](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45102403746) |
+| 23 Nov 2026 | Push ke `main` | `4d7dd55` | Success | [Run 45105977800](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/runs/45105977800) |
+
+History ada di [Actions CodeQL](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/actions/workflows/codeql.yml)
+
+### CodeQL Scanning Alerts
+
+| Alert | Lokasi | Potensi dampak | Perlu diperbaiki? | Alasan |
+| --- | --- | --- | --- | --- |
+| [#7](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/security/code-scanning/7) | `internal/targetdb/statement.go:11` | SQL buatan pengguna mencapai PostgreSQL dan dapat mengubah data/schema target. | Tidak | False positive. SQL telah melewati parser AST PostgreSQL, allowlist statement dan fungsi, permission, approval lintas group, snapshot immutable, revalidation worker, serta transaksi sebelum dieksekusi. |
+| [#6](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/security/code-scanning/6) | `internal/targetdb/migration.go:119` | SQL dinamis pada jalur SQLite dapat menjalankan perubahan yang tidak diinginkan jika validator dapat dilewati. | Tidak | False positive. SQL melewati `sqlguard.Migration`, allowlist operasi, pembatasan jumlah statement, pemblokiran operasi administratif, serta transaksi yang dibatalkan jika satu statement gagal. Test injection memastikan input berbahaya ditolak. |
+| [#4](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/security/code-scanning/4) | `internal/targetdb/plan.go:67` | Input pengguna digabungkan ke `EXPLAIN (FORMAT JSON)` PostgreSQL. | Tidak | False positive. Input melewati `sqlguard.Plan`, hanya menerima satu statement yang diizinkan, hanya digunakan untuk `EXPLAIN`, dan transaksi selalu di-rollback. |
+| [#3](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/security/code-scanning/3) | `internal/targetdb/plan.go:40` | Input pengguna digabungkan ke `EXPLAIN QUERY PLAN` SQLite. | Tidak | False positive. Input melewati validasi satu statement, hanya digunakan untuk execution plan, dan transaksi tidak pernah di-commit. |
+| [#1](https://github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/security/code-scanning/1) | `internal/targetdb/rows.go:52` | Nama schema atau tabel dari request dapat memengaruhi query pembacaan data. | Tidak | False positive. Tabel harus ada pada snapshot, identifier di-escape oleh `Quote`, sedangkan `LIMIT` dan `OFFSET` dikirim sebagai parameter. Test injection memastikan nama tabel berbahaya ditolak. |
