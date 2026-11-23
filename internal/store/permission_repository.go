@@ -189,3 +189,36 @@ func (repository *PermissionRepository) EffectivePermission(ctx context.Context,
 
 	return permission, nil
 }
+
+// Mengambil izin tertinggi user di seluruh database dalam satu query untuk mencegah N+1.
+func (repository *PermissionRepository) EffectivePermissions(ctx context.Context, userID int64) (map[int64]core.Permission, error) {
+	const query = `
+		SELECT database_grant.database_id, database_grant.permission
+		FROM group_members AS member
+		JOIN database_grants AS database_grant
+			ON database_grant.group_id = member.group_id
+		WHERE member.user_id = $1
+	`
+
+	rows, err := repository.database.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("Gagal mengambil daftar permission user: %w", err)
+	}
+	defer rows.Close()
+
+	permissions := map[int64]core.Permission{}
+	for rows.Next() {
+		var databaseID int64
+		var candidate core.Permission
+		if err := rows.Scan(&databaseID, &candidate); err != nil {
+			return nil, fmt.Errorf("Gagal membaca daftar permission user: %w", err)
+		}
+		permissions[databaseID] = core.HighestPermission(permissions[databaseID], candidate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Gagal membaca daftar permission user: %w", err)
+	}
+
+	return permissions, nil
+}

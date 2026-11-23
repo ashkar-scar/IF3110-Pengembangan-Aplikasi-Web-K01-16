@@ -127,6 +127,62 @@ func (a *API) open(ctx context.Context, target Target) (*targetdb.Connection, er
 	return conn, err
 }
 
+func (a *API) evictTargetPool(targetID int64) {
+	a.poolMu.Lock()
+	var old *targetdb.Connection
+	if entry, ok := a.targetPools[targetID]; ok {
+		old = entry.conn
+		delete(a.targetPools, targetID)
+	}
+	a.poolMu.Unlock()
+	if old != nil {
+		old.Close()
+	}
+}
+
+// Memakai ulang pool PostgreSQL target agar endpoint baca explorer tidak membuat koneksi TCP baru tiap request.
+func (a *API) openShared(ctx context.Context, target Target) (*targetdb.Connection, func(), error) {
+	if target.Driver != "postgres" || target.ID <= 0 {
+		conn, err := a.open(ctx, target)
+		if err != nil {
+			return nil, nil, err
+		}
+		return conn, func() { conn.Close() }, nil
+	}
+
+	key := targetPoolKey{id: target.ID, config: target.Config, password: target.Password}
+	a.poolMu.Lock()
+	if entry, ok := a.targetPools[target.ID]; ok && entry.key == key {
+		a.poolMu.Unlock()
+		return entry.conn, func() {}, nil
+	}
+	a.poolMu.Unlock()
+
+	conn, err := a.open(ctx, target)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn.DB.SetMaxOpenConns(25)
+	conn.DB.SetMaxIdleConns(10)
+	conn.DB.SetConnMaxIdleTime(30 * time.Second)
+
+	a.poolMu.Lock()
+	if a.targetPools == nil {
+		a.targetPools = map[int64]cachedTargetPool{}
+	}
+	if existing, ok := a.targetPools[target.ID]; ok {
+		if existing.key == key {
+			a.poolMu.Unlock()
+			conn.Close()
+			return existing.conn, func() {}, nil
+		}
+		existing.conn.Close()
+	}
+	a.targetPools[target.ID] = cachedTargetPool{key: key, conn: conn}
+	a.poolMu.Unlock()
+	return conn, func() {}, nil
+}
+
 // Log error koneksi lalu balas 503 yang aman ke klien.
 func targetError(w http.ResponseWriter, err error) {
 	log.Printf("Database target tidak dapat diakses: %v", err)
@@ -188,12 +244,12 @@ func (a *API) explore(w http.ResponseWriter, r *http.Request, session auth.Authe
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	conn, err := a.open(ctx, target)
+	conn, release, err := a.openShared(ctx, target)
 	if err != nil {
 		targetError(w, err)
 		return
 	}
-	defer conn.Close()
+	defer release()
 
 	query := r.URL.Query()
 	schema := defaultTargetSchema(target.Driver, query.Get("schema"))

@@ -58,6 +58,7 @@ func main() {
 
 	// Buat API dengan service autentikasi.
 	app := api.Create(authService, secureCookies)
+	defer app.Close()
 	app.UseUsers(userRepository)
 	groupRepository := store.NewGroupRepository(database)
 	permissionRepository := store.NewPermissionRepository(database)
