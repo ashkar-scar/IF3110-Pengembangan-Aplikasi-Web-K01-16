@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/core"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/sqlguard"
+	"github.com/ashkar-scar/IF3110-Pengembangan-Aplikasi-Web-K01-16/internal/targetdb"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -90,6 +92,24 @@ func validateDraftForReview(draft core.Draft) error {
 		return ErrDraftInvalid
 	}
 
+	// Validasi kedua SQL sebelum request dibuat agar syntax atau operasi berbahaya tidak masuk review
+	if draft.ExecutionMode == core.ExecutionBatch {
+		if _, err := targetdb.ParseBatch(draft.SQLUp, draft.SQLDown, draft.BatchColumn, draft.IsIrreversible); err != nil {
+			return ErrDraftInvalid
+		}
+		return nil
+	}
+
+	if _, err := sqlguard.PostgresMigration(draft.SQLUp); err != nil {
+		return ErrDraftInvalid
+	}
+
+	if !draft.IsIrreversible {
+		if _, err := sqlguard.PostgresMigration(draft.SQLDown); err != nil {
+			return ErrDraftInvalid
+		}
+	}
+
 	return nil
 }
 
@@ -142,8 +162,7 @@ func (repository *MigrationRepository) SubmitReview(ctx context.Context, targetI
 	candidates := []approvalCandidate{}
 	for rows.Next() {
 		var candidate approvalCandidate
-		if err = rows.Scan(&candidate.GroupID, &candidate.GroupName, &candidate.LeaderID, &candidate.LeaderName, &candidate.LeaderLive); 
-		err != nil {
+		if err = rows.Scan(&candidate.GroupID, &candidate.GroupName, &candidate.LeaderID, &candidate.LeaderName, &candidate.LeaderLive); err != nil {
 			rows.Close()
 			return core.MigrationRequest{}, fmt.Errorf("Gagal membaca calon approver: %w", err)
 		}
@@ -207,8 +226,7 @@ func (repository *MigrationRepository) SubmitReview(ctx context.Context, targetI
 	request.Approvals = make([]core.MigrationApproval, 0, len(candidates))
 	for _, candidate := range candidates {
 		var approvalID int64
-		if err = transaction.QueryRow(ctx, insertApprovalQuery, request.ID, candidate.GroupID, *candidate.LeaderID).Scan(&approvalID); 
-		err != nil {
+		if err = transaction.QueryRow(ctx, insertApprovalQuery, request.ID, candidate.GroupID, *candidate.LeaderID).Scan(&approvalID); err != nil {
 			return core.MigrationRequest{}, fmt.Errorf("Gagal membuat approval: %w", err)
 		}
 
