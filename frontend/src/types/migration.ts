@@ -135,6 +135,8 @@ export interface HistoryAttempt {
     target_id: number;
     draft_id: number;
     revision: number;
+    job_id?: string | null;
+    batch_no?: number | null;
     description: string;
     sql: string;
     actor_name: string;
